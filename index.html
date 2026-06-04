@@ -1,0 +1,1725 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>杨的外刊阅读器 - 真题联动版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: {
+                            850: '#1f2937',
+                            900: '#111827',
+                            950: '#030712',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        
+        window.firebaseImports = {
+            initializeApp, getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged,
+            getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot
+        };
+    </script>
+
+    <style>
+        @keyframes fadeInDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .animate-fade-in-down { animation: fadeInDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        .animate-slide-in-right { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 6px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #4B5563; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        ruby { ruby-position: under; ruby-align: center; }
+        
+        .loader-spin {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        input[type=range] {
+            accent-color: #3b82f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans dark:bg-gray-950 dark:text-gray-100 transition-colors duration-300">
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        // 核心注入：API密钥
+        window.apiKey = "";
+
+        const { useState, useMemo, useRef, useEffect, Fragment } = React;
+
+        // ==========================================
+        // 全局安全工具函数绑定
+        // ==========================================
+        window.getExcerpt = (text) => {
+            if (!text) return "";
+            const cleanText = text.replace(/\n/g, ' ');
+            return cleanText.length > 60 ? cleanText.substring(0, 60) + '...' : cleanText;
+        };
+
+        window.showToast = (message, type = 'success') => {
+            const modal = document.createElement('div');
+            const bgColor = type === 'error' ? '#EF4444' : (type === 'warning' ? '#F59E0B' : '#10B981');
+            modal.innerHTML = `
+                <div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:${bgColor};color:white;padding:12px 24px;border-radius:8px;box-shadow:0 4px 6px rgba(0,0,0,0.1);z-index:9999;font-weight:500;font-size:14px;max-width:90vw;word-wrap:break-word;">
+                    ${message}
+                </div>
+            `;
+            document.body.appendChild(modal);
+            setTimeout(() => {
+                modal.style.opacity = '0';
+                modal.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => document.body.removeChild(modal), 300);
+            }, 4500); 
+        };
+
+        // 终极安全 JSON 解析器：剥离可能带有 markdown 格式的外壳
+        window.safeParseJSON = (text) => {
+            if (typeof text !== 'string') return text;
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                try {
+                    const markdownRegex = new RegExp('`{3}(?:json)?\\s*([\\s\\S]*?)\\s*`{3}', 'i');
+                    const match = text.match(markdownRegex);
+                    if (match) return JSON.parse(match[1].trim());
+                    
+                    const objMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+                    if (objMatch) return JSON.parse(objMatch[1].trim());
+                } catch(err) {}
+                throw new Error("JSON 解析彻底失败，数据格式不合规");
+            }
+        };
+
+        // ==========================================
+        // 1. 外部动态数据源配置 (URLs)
+        // ==========================================
+        const CORPUS_URL = "https://gist.githubusercontent.com/mirrorlious97/1f649feb13d7da16cbdc3817841c16cc/raw/a90daca68e24f5892f68edc38793f858ceca5f05/12345.txt"; 
+        const PRESET_DICT_URL = "https://gist.githubusercontent.com/mirrorlious97/e39459d2885f9eb78257d4524e18df6f/raw/560c12500d61289af3a6f22d7e41e421fed4cdf3/console=v.%2520%25E5%25AE%2589%25E6%2585%25B0%2520n.%2520%25E6%258E%25A7%25E5%2588%25B6%25E5%258F%25B0.txt";
+        const HARD_DICT_URL = "https://gist.githubusercontent.com/mirrorlious97/9e36522b809b300f316fc5899bbb448f/raw/d685d0efe96e29603df00657ddd71b404f1baac4/%25E7%2594%259F%25E8%25AF%258D";
+
+        let REAL_EXAM_CORPUS = [];
+
+        const parseDictText = (text) => {
+            const dict = {};
+            text.split('\n').forEach(line => {
+                const sepMatch = line.match(/([=：:]|\s{2,})/);
+                if (sepMatch) {
+                    const sepIndex = line.indexOf(sepMatch[0]);
+                    let key = line.substring(0, sepIndex).trim().toLowerCase();
+                    let meaning = line.substring(sepIndex + sepMatch[0].length).trim();
+                    meaning = meaning.replace(/\b(?:v|n|adj|adv|prep|conj|pron|art|num|vi|vt)\./gi, '').replace(/\s+/g, ' ').trim();
+                    if (key) dict[key] = meaning;
+                }
+            });
+            return dict;
+        };
+
+        const fetchAndParseCorpus = async (setCorpusCount) => {
+            if (!CORPUS_URL) return;
+            try {
+                const response = await fetch(CORPUS_URL);
+                if (!response.ok) throw new Error("Failed to fetch corpus");
+                const rawText = await response.text();
+                
+                REAL_EXAM_CORPUS = rawText.trim().split('\n').map(line => {
+                    const match = line.match(/^\[(.*?)\]\s*(.*)$/);
+                    if (match) return { source: match[1].trim(), sentence: match[2].trim() };
+                    return null;
+                }).filter(Boolean);
+                
+                if (setCorpusCount) setCorpusCount(REAL_EXAM_CORPUS.length);
+            } catch (error) { console.error("Error loading external corpus:", error); }
+        };
+
+        const getRelevantCorpus = (targetText, corpus, topN = 40) => {
+            if (!corpus || corpus.length === 0) return [];
+            const targetWords = new Set(targetText.toLowerCase().match(/[a-z]+/g) || []);
+            const structureWords = new Set([
+                'which', 'that', 'who', 'whom', 'where', 'when', 'whose',
+                'although', 'though', 'because', 'if', 'unless', 'since', 'as', 'while',
+                'to', 'with', 'by', 'for', 'about', 'without', 'despite', 'doing', 'done'
+            ]);
+
+            const scoredCorpus = corpus.map(item => {
+                const itemWords = item.sentence.toLowerCase().match(/[a-z]+/g) || [];
+                let score = 0;
+                itemWords.forEach(w => {
+                    if (targetWords.has(w)) score += structureWords.has(w) ? 3 : 1; 
+                });
+                score -= (Math.abs(itemWords.length - targetWords.size) * 0.1);
+                return { ...item, score };
+            });
+
+            return scoredCorpus.sort((a, b) => b.score - a.score).slice(0, topN).map(item => ({
+                source: item.source,
+                sentence: item.sentence
+            }));
+        };
+
+        const getLemmaMatches = (rawWord, dicts) => {
+            const w = rawWord.toLowerCase().replace(/[^a-z]/g, '');
+            if (!w) return null;
+            
+            for (const dictObj of dicts) {
+                const { data, type } = dictObj;
+                if (!data) continue;
+
+                const check = (word) => data[word] ? { translation: data[word], type, word } : null;
+
+                let match = check(w);
+                if (match) return match;
+
+                if (w.endsWith('s')) {
+                    match = check(w.slice(0, -1)); if (match) return match;
+                    if (w.endsWith('es')) { match = check(w.slice(0, -2)); if (match) return match; }
+                    if (w.endsWith('ies')) { match = check(w.slice(0, -3) + 'y'); if (match) return match; }
+                }
+                
+                if (w.endsWith('ed')) {
+                    match = check(w.slice(0, -1)); if (match) return match;
+                    match = check(w.slice(0, -2)); if (match) return match;
+                    if (w.endsWith('ied')) { match = check(w.slice(0, -3) + 'y'); if (match) return match; }
+                    if (w.length > 3 && w[w.length-3] === w[w.length-4]) {
+                        match = check(w.slice(0, -3)); if (match) return match;
+                    }
+                }
+                
+                if (w.endsWith('ing')) {
+                    match = check(w.slice(0, -3)); if (match) return match;
+                    match = check(w.slice(0, -3) + 'e'); if (match) return match;
+                    if (w.length > 4 && w[w.length-4] === w[w.length-5]) {
+                        match = check(w.slice(0, -4)); if (match) return match;
+                    }
+                }
+                
+                if (w.endsWith('ly')) {
+                    match = check(w.slice(0, -2)); if (match) return match; 
+                    if (w.endsWith('ily')) { match = check(w.slice(0, -3) + 'y'); if (match) return match; }
+                }
+            }
+            return null;
+        };
+
+        const VOCAB_DB = {
+            cet6: {
+                resolution: "决议", initiate: "发起", authorization: "授权", commits: "投入",
+                dismissing: "驳回", exclusive: "排他的", regulate: "规范", designates: "指定"
+            },
+            kaoyan: {
+                unilateral: "单边的", vowed: "发誓", halt: "停止", imminent: "迫在眉睫的",
+                assertion: "断言", verge: "边缘", preemptive: "先发制人的", echoed: "附和"
+            }
+        };
+
+        const PHRASE_DB = {
+            "war of choice": { trans: "选择性战争", note: "【政经/法律背景】区别于“自卫反击(war of necessity)”，指非被迫、主动发起的战争。" },
+            "state of the union": { trans: "国情咨文", note: "【常识/专有名词】美国总统每年在国会发表的年度报告。" },
+            "dimming the prospects": { trans: "使前景黯淡", note: "【高级动宾搭配】dim 作及物动词用（使变暗）+ prospect（前景/可能性）。" }
+        };
+
+        // ==========================================
+        // 2. 超强抗并发多协议 API 引擎
+        // ==========================================
+        const getEndpoint = (config, isTTS = false) => {
+            const key = config?.key || window.apiKey; 
+            let baseUrl = config?.baseUrl || "https://generativelanguage.googleapis.com";
+            baseUrl = baseUrl.replace(/\/+$/, ""); 
+            
+            if (isTTS) {
+                return `${baseUrl}/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`;
+            }
+
+            const rawModel = config?.model || "gemini-2.5-flash-preview-09-2025";
+            const cleanModel = rawModel.trim().toLowerCase().replace(/\s+/g, '-');
+            const apiVersion = config?.apiVersion || "v1beta";
+
+            return `${baseUrl}/${apiVersion}/models/${cleanModel}:generateContent?key=${key}`;
+        };
+
+        const fetchWithRetry = async (url, options, retries = 5) => {
+            const delays = [2000, 4000, 8000, 15000, 20000]; 
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        if (response.status === 404) {
+                            throw new Error(`模型不存在 (HTTP 404)。请确保模型名称填写正确`);
+                        }
+                        if (response.status === 401 || response.status === 403) {
+                            throw new Error(`API 密钥无效或未授权 (HTTP ${response.status})。`);
+                        }
+                        if (response.status === 400) {
+                            throw new Error(`请求被拒绝 (HTTP 400)。可能代理接口格式不兼容。`);
+                        }
+                        const errorText = await response.text();
+                        let errorMsg = errorText;
+                        try {
+                            const errObj = JSON.parse(errorText);
+                            if (errObj.error && errObj.error.message) errorMsg = errObj.error.message;
+                        } catch(e){}
+                        const err = new Error(`HTTP ${response.status}: ${errorMsg}`);
+                        err.status = response.status;
+                        throw err;
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.warn(`API 尝试 ${i + 1} 失败，准备重试:`, error.message);
+                    if (error.message.includes('API 密钥') || error.message.includes('模型不存在') || error.message.includes('请求被拒绝') || (error.status && error.status >= 400 && error.status < 500 && error.status !== 429)) {
+                        throw error;
+                    }
+                    if (i === retries - 1) throw error;
+                    await new Promise(res => setTimeout(res, delays[i]));
+                }
+            }
+        };
+
+        const getCandidateText = (result) => {
+            if (!result || !result.candidates || result.candidates.length === 0) {
+                throw new Error("API 未返回有效内容或被限流过滤");
+            }
+            return result.candidates[0].content.parts[0].text;
+        };
+
+        const callLLM = async (prompt, apiConfig, isJson = false) => {
+            const type = apiConfig?.apiType || 'gemini';
+            const key = apiConfig?.key || window.apiKey;
+            
+            if (type === 'openai') {
+                const baseUrl = (apiConfig?.baseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1").replace(/\/+$/, "");
+                const endpoint = `${baseUrl}/chat/completions`;
+                const payload = {
+                    model: apiConfig?.model || "qwen-plus",
+                    messages: [{ role: "user", content: prompt }]
+                };
+                const result = await fetchWithRetry(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+                    body: JSON.stringify(payload)
+                });
+                if (!result.choices || result.choices.length === 0) throw new Error("OpenAI API 未返回有效内容");
+                let text = result.choices[0].message.content;
+                if (isJson) return window.safeParseJSON(text);
+                return text.trim();
+            } else {
+                const endpoint = getEndpoint(apiConfig);
+                const payload = { contents: [{ parts: [{ text: prompt }] }] };
+                const result = await fetchWithRetry(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                let text = getCandidateText(result);
+                if (isJson) return window.safeParseJSON(text);
+                return text.trim();
+            }
+        };
+
+        const callGeminiFullTranslation = async (fullText, apiConfig) => {
+            const prompt = `你是一名深谙政经语境的高级翻译官。请将以下英文文章逐段精翻成中文。
+要求：
+1. 必须符合中文新闻语感，精准翻译政经/法律术语。
+2. 绝对保持与原文完全一致的段落数量。段落与段落之间使用双换行符严格分隔，绝不能合并段落！
+3. 仅输出纯中文译文，绝不附加任何开场白、解析或多余的标点。
+原文：\n"${fullText}"`;
+            return await callLLM(prompt, apiConfig, false);
+        };
+
+        const callGeminiTranslation = async (text, apiConfig) => {
+            const prompt = `你是一名深谙政经语境的高级翻译官。请精翻以下段落：\n要求：符合中文新闻语感，精准翻译政经/法律术语。仅输出纯中文译文，绝不附加任何解析。\n原文：\n"${text}"`;
+            return await callLLM(prompt, apiConfig, false);
+        };
+
+        const callGeminiWordDisambiguation = async (word, context, rawMeaning, apiConfig) => {
+            const prompt = `词汇 "${word}" 在字典中的基础释义有：【${rawMeaning}】。
+请结合以下原句语境，分析该词在句中的词性，并指出它在此处**最准确的一个中文意思**。请简明扼要陈述理由（50字以内）。
+原句："${context}"`;
+            return await callLLM(prompt, apiConfig, false);
+        };
+
+        const callGeminiIntensiveAnalysis = async (text, apiConfig) => {
+            const miniCorpus = getRelevantCorpus(text, REAL_EXAM_CORPUS, 40);
+            const prompt = `你是一位考研英语名师。请提取以下段落中所有具有考研语法拆解价值的长难句。
+对每一个提取出的长难句：
+1. 必须一字不差地摘录原文中的这句长难句作为 originalSentence（不得增删任何标点和空格，必须是原文的完整原句）。
+2. 将该句按语法群切片(chunks)。注意：切片内容拼接起来必须与 originalSentence 完全一致！【核心警告】：标注属性(type)严格且只能从以下5个词中选择："主干", "非谓语动词", "介词短语", "从句", "其他"。绝对不允许创造新词！
+3. 提供该句型的考研作文实战应用指南(writingTip)。保留你最擅长的模板化写作技巧和句型框架。
+4. 核心语法点分析（双轨对比）：
+   - 必须基于该句的核心语法点，生成一个【🤖 AI 模拟例句】(aiExample)。
+   - 【绝对指令 - 真题原句追踪】(realExamMatch)：你必须扫描下方的《真题语料库》，挑选出一个语法结构最相似的原句作为匹配项。
+
+《真题语料库》：
+${JSON.stringify(miniCorpus, null, 2)}
+
+待解析段落：\n"${text}"
+
+务必以纯正的 JSON 格式输出，包含以下结构：
+{
+  "hasComplexSentence": true,
+  "complexSentences": [
+    {
+      "originalSentence": "...",
+      "chunks": [{"text": "...", "type": "主干/非谓语动词/介词短语/从句/其他"}],
+      "sentenceTranslation": "...",
+      "writingTip": "...",
+      "aiExample": {"sentence": "...", "translation": "..."},
+      "realExamMatch": {"sentence": "...", "translation": "...", "source": "..."}
+    }
+  ]
+}
+只输出 JSON 字符串，不要有多余的标记。`;
+            return await callLLM(prompt, apiConfig, true);
+        };
+
+        const callGeminiReadingAnalysis = async (text, apiConfig) => {
+            const prompt = `你是一名“考研英语阅读命题专家”。请对以下全文文本进行全局分析：
+1. 指代分析：明确贯穿全文的核心指代词。
+2. 逻辑结构拆解：给这篇文章打上“逻辑标签”并说明论述展开过程。
+3. 同义替换映射：列出原文核心关键词及考研等价替换。
+4. 选项陷阱识别：预判命题人陷阱。
+5. 核心主旨：一句话还原真实意思。
+
+待解析文本：\n"${text}"
+
+务必以纯正的 JSON 格式输出，包含以下结构：
+{
+  "referenceAnalysis": ["...", "..."],
+  "logicalStructure": "...",
+  "synonymMapping": [{"keyword": "...", "replacement": "..."}],
+  "trapIdentification": "...",
+  "coreMeaning": "..."
+}
+只输出 JSON 字符串，不要有多余的标记。`;
+            return await callLLM(prompt, apiConfig, true);
+        };
+
+        const callGeminiQuiz = async (text, apiConfig) => {
+            const prompt = `根据段落生成一道考研英语阅读理解单项选择题（全英文选项，带解析）：\n"${text}"
+
+务必以纯正的 JSON 格式输出，包含以下结构：
+{
+  "questionEn": "...",
+  "questionZh": "...",
+  "options": [
+    {"id": "A", "textEn": "...", "textZh": "..."},
+    {"id": "B", "textEn": "...", "textZh": "..."},
+    {"id": "C", "textEn": "...", "textZh": "..."},
+    {"id": "D", "textEn": "...", "textZh": "..."}
+  ],
+  "correctAnswerId": "A",
+  "analysis": "..."
+}
+只输出 JSON 字符串，不要有多余的标记。`;
+            return await callLLM(prompt, apiConfig, true);
+        };
+
+        const callGeminiSummary = async (fullText, apiConfig) => {
+            const prompt = `提取外刊文章核心主旨，构建3层深度的中英双语逻辑树。直接输出JSON：
+{
+  "mindmap": {
+    "nameEn": "Core topic English", 
+    "nameZh": "核心议题中文", 
+    "children": [{"nameEn": "...", "nameZh": "...", "children": []}]
+  }
+}
+原文：\n${fullText}`;
+            return await callLLM(prompt, apiConfig, true);
+        };
+
+        const callGeminiTTS = async (text, apiConfig) => {
+            const endpoint = getEndpoint(apiConfig, true);
+            const payload = {
+                contents: [{ parts: [{ text: `Please read clearly: ${text}` }] }],
+                generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
+            };
+            const result = await fetchWithRetry(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const base64PCM = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+            if (!base64PCM) throw new Error("API 未返回有效音频数据");
+            return createWavFileFromPCM(base64PCM, 24000);
+        };
+
+        const createWavFileFromPCM = (base64PCM, sampleRate = 24000) => {
+            const binaryString = window.atob(base64PCM);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+            const buffer = bytes.buffer;
+            const wavHeader = new ArrayBuffer(44);
+            const view = new DataView(wavHeader);
+            const writeString = (view, offset, string) => { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); };
+            writeString(view, 0, 'RIFF'); view.setUint32(4, 36 + buffer.byteLength, true); writeString(view, 8, 'WAVE'); writeString(view, 12, 'fmt ');
+            view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, sampleRate, true);
+            view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); writeString(view, 36, 'data'); view.setUint32(40, buffer.byteLength, true);
+            const blob = new Blob([wavHeader, buffer], { type: 'audio/wav' });
+            return URL.createObjectURL(blob);
+        };
+
+        const extractTextFromMedia = async (base64Data, mimeType, apiConfig) => {
+            const prompt = "Extract English text accurately. CRITICAL: Fix physical line breaks mid-sentence so paragraphs are continuous. Separate different paragraphs with double newlines strictly. Output ONLY the English text.";
+            const type = apiConfig?.apiType || 'gemini';
+            const key = apiConfig?.key || window.apiKey;
+            let baseUrl = (apiConfig?.baseUrl || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
+            const model = "gemini-2.5-flash"; 
+            const endpoint = `${baseUrl}/v1beta/models/${model}:generateContent?key=${key}`;
+            
+            const result = await fetchWithRetry(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [ { text: prompt }, { inlineData: { mimeType: mimeType, data: base64Data } } ] }] })
+            });
+            return getCandidateText(result).replace(/(?<!\n)\n(?!\n)/g, ' ');
+        };
+
+        // ==========================================
+        // 3. UI 子组件
+        // ==========================================
+        const LogicTreeNode = ({ node, isRoot = false, displayMode }) => {
+            if (!node) return null;
+            const renderText = () => {
+                const mainColor = isRoot ? 'text-white' : 'text-gray-800 dark:text-gray-200'; const subColor = isRoot ? 'text-gray-300' : 'text-gray-500 dark:text-gray-400';
+                if (displayMode === 'en') return <span className={`font-serif text-[14px] ${mainColor}`}>{node.nameEn}</span>;
+                if (displayMode === 'zh') return <span className={`text-[13.5px] ${mainColor}`}>{node.nameZh}</span>;
+                return ( <div className="flex flex-col space-y-1"><span className={`font-serif font-semibold text-[13.5px] leading-tight ${mainColor}`}>{node.nameEn}</span><span className={`text-[11.5px] font-normal leading-tight ${subColor}`}>{node.nameZh}</span></div> );
+            };
+            return (
+                <div className="flex">
+                    <div className="flex flex-col justify-center pr-4 md:pr-8 relative group/node">
+                        <div className={`px-3.5 py-2.5 rounded-xl border whitespace-normal break-words z-10 relative transition-all duration-300 min-w-[120px] max-w-[260px] md:max-w-[320px] ${isRoot ? 'bg-gray-900 dark:bg-black border-gray-800 dark:border-gray-700 shadow-md' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-400 shadow-sm'}`}>{renderText()}</div>
+                        {node.children?.length > 0 && <div className="absolute right-0 top-1/2 w-4 md:w-8 h-[2px] bg-gray-200 dark:bg-gray-700 group-hover/node:bg-gray-400 dark:group-hover/node:bg-gray-500 transition-colors"></div>}
+                    </div>
+                    {node.children?.length > 0 && (
+                        <div className="flex flex-col justify-center border-l-[2px] border-gray-200 dark:border-gray-700 relative py-1">
+                            {node.children.map((child, idx) => (
+                                <div key={idx} className="relative flex items-center py-2.5 pl-4 md:pl-8"><div className="absolute left-0 top-1/2 w-4 md:w-8 h-[2px] bg-gray-200 dark:bg-gray-700"></div><LogicTreeNode node={child} displayMode={displayMode} /></div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const WordHighlighter = ({ text, activeDicts, highlightMode, onWordClick }) => {
+            const parts = text.split(/([a-zA-Z]+-?[a-zA-Z]*)/g);
+            return (
+                <Fragment>
+                    {parts.map((part, index) => {
+                        const match = getLemmaMatches(part, activeDicts);
+                        if (match && highlightMode !== 'none' && part.trim().length > 0) {
+                            const { translation, type, word: lemma } = match;
+                            
+                            const isRed = type === 'hard';
+                            if (highlightMode === 'red' && !isRed) return <span key={index} className="transition-all">{part}</span>;
+                            if (highlightMode === 'blue' && isRed) return <span key={index} className="transition-all">{part}</span>;
+
+                            let bgColor = isRed ? 'bg-red-100/80 dark:bg-red-900/40 border-b-[2px] border-red-300 dark:border-red-700' : 'bg-sky-100/80 dark:bg-sky-900/40 border-b-[2px] border-sky-300 dark:border-sky-700'; 
+                            let textColor = isRed ? 'text-red-900 dark:text-red-300' : 'text-[#004b87] dark:text-sky-300';
+                            
+                            return (
+                                <span key={index} onClick={(e) => { e.stopPropagation(); onWordClick({ word: part, lemma, translation, type }); }} className={`mx-[1px] px-[2px] rounded-[3px] cursor-pointer transition-all hover:opacity-80 ${bgColor} ${textColor}`}>
+                                    {part}
+                                </span>
+                            );
+                        }
+                        return <span key={index} className="transition-all">{part}</span>;
+                    })}
+                </Fragment>
+            );
+        };
+
+        const SyntaxBreakdowns = ({ data }) => {
+            if (!data || !data.hasComplexSentence || !data.complexSentences || data.complexSentences.length === 0) return null;
+            const typeColorMap = { "主干": "bg-amber-100/70 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800", "非谓语动词": "bg-blue-100/70 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 border-blue-200 dark:border-blue-800", "介词短语": "bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800", "从句": "bg-rose-100/70 dark:bg-rose-900/30 text-rose-900 dark:text-rose-200 border-rose-200 dark:border-rose-800", "其他": "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600" };
+            const dotColorMap = { "主干": "bg-amber-400", "非谓语动词": "bg-blue-400", "介词短语": "bg-emerald-400", "从句": "bg-rose-400" };
+
+            return (
+                <div className="space-y-6 mt-6">
+                    {data.complexSentences.map((sentenceObj, sIdx) => {
+                        const { chunks, sentenceTranslation, writingTip, aiExample, realExamMatch, originalSentence } = sentenceObj;
+                        return (
+                            <div key={sIdx} className="bg-white dark:bg-gray-800 border border-slate-200 dark:border-gray-700 rounded-2xl p-5 md:p-6 shadow-sm relative overflow-hidden animate-fade-in-down">
+                                <h4 className="text-xs font-bold text-slate-400 dark:text-gray-500 uppercase tracking-widest mb-3">核心难句解构 #{sIdx + 1}</h4>
+                                
+                                {originalSentence && (
+                                    <div className="bg-amber-50/50 dark:bg-amber-900/10 border-l-4 border-amber-400 dark:border-amber-600 pl-4 py-2 mb-5 rounded-r-lg">
+                                        <p className="text-[14px] text-amber-900 dark:text-amber-200 font-serif leading-relaxed">{originalSentence}</p>
+                                    </div>
+                                )}
+
+                                <div className="flex flex-wrap gap-4 mb-5 border-b border-gray-100 dark:border-gray-700 pb-3">
+                                    {['主干', '非谓语动词', '介词短语', '从句'].map(type => (
+                                        <div key={type} className="flex items-center space-x-1.5"><span className={`w-2 h-2 rounded-full ${dotColorMap[type]}`}></span><span className="text-[11.5px] font-medium text-gray-500 dark:text-gray-400">{type}</span></div>
+                                    ))}
+                                </div>
+                                <div className="leading-[2.8] text-[1.05rem] font-serif text-gray-900 dark:text-gray-200 mb-5">
+                                    {chunks?.map((chunk, idx) => chunk.text.trim() ? <span key={idx} className="mr-1.5 mb-2 inline-block"><span className={`px-2.5 py-1 rounded-md border ${typeColorMap[chunk.type] || typeColorMap["其他"]}`}>{chunk.text.trim()}</span></span> : null)}
+                                </div>
+                                <div className="text-[13.5px] text-gray-600 dark:text-gray-400 leading-relaxed mb-6 text-justify border-l-2 border-gray-300 dark:border-gray-600 pl-3">{sentenceTranslation}</div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/50 p-4 rounded-xl flex flex-col justify-between">
+                                        <div><div className="flex items-center space-x-2 mb-3"><span className="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">🤖 AI 模拟例句</span></div><p className="text-[13.5px] font-serif text-blue-900 dark:text-blue-300 mb-2 leading-relaxed">"{aiExample?.sentence}"</p></div>
+                                        <p className="text-[12px] text-blue-700 dark:text-blue-400 leading-relaxed border-t border-blue-100 dark:border-blue-900/50 pt-2">{aiExample?.translation}</p>
+                                    </div>
+                                    <div className="bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/50 p-4 rounded-xl flex flex-col justify-between">
+                                        <div><div className="flex items-center justify-between mb-3"><span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">🏛️ 真题原句追踪</span>{realExamMatch?.source && <span className="text-[10px] text-emerald-800 dark:text-emerald-400 font-bold border-b border-emerald-300 dark:border-emerald-700">{realExamMatch.source}</span>}</div><p className="text-[13.5px] font-serif text-emerald-900 dark:text-emerald-300 mb-2 leading-relaxed">"{realExamMatch?.sentence}"</p></div>
+                                        <p className="text-[12px] text-emerald-700 dark:text-emerald-400 leading-relaxed border-t border-emerald-100 dark:border-emerald-900/50 pt-2">{realExamMatch?.translation}</p>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-900 dark:bg-gray-900 p-4 rounded-xl shadow-inner">
+                                    <div className="flex items-center space-x-2 mb-2"><svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg><span className="text-[13px] font-bold text-amber-400 tracking-wider">写作提炼法则</span></div>
+                                    <div className="text-[13px] text-slate-300 dark:text-gray-300 leading-relaxed text-justify">{writingTip}</div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        };
+
+        const escapeRegExp = (string) => {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        };
+
+        const Paragraph = ({ text, activeDicts, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig }) => {
+            const [showTranslation, setShowTranslation] = useState(false);
+            const [localTranslation, setLocalTranslation] = useState("");
+            const [isLocalTransLoading, setIsLocalTransLoading] = useState(false);
+            
+            const [showAnalysis, setShowAnalysis] = useState(false);
+            const [analysisData, setAnalysisData] = useState(null);
+            const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
+            
+            const [audioUrl, setAudioUrl] = useState(null);
+            const [isAudioLoading, setIsAudioLoading] = useState(false);
+            
+            const [showQuiz, setShowQuiz] = useState(false);
+            const [quizData, setQuizData] = useState(null);
+            const [isQuizLoading, setIsQuizLoading] = useState(false);
+            const [selectedOption, setSelectedOption] = useState(null);
+            
+            const [activeNote, setActiveNote] = useState(null);
+            const [isInteracting, setIsInteracting] = useState(false);
+
+            const isConsideredParagraph = text.split(/\s+/).filter(Boolean).length >= 15 && /[.,:;]/.test(text);
+            const isPanelOpen = showTranslation || showAnalysis || showQuiz || !!activeNote || isTransLoading || isLocalTransLoading || isAnalysisLoading || isAudioLoading || isQuizLoading || !!audioUrl;
+            const showActions = isInteracting || isPanelOpen;
+
+            const handleParagraphClick = (e) => {
+                if (window.getSelection() && window.getSelection().toString().length > 0) return;
+                if (!isPanelOpen) setIsInteracting(prev => !prev);
+            };
+
+            const phraseRegex = useMemo(() => {
+                const customPhrases = activeDicts
+                    .flatMap(d => Object.keys(d.data || {}))
+                    .filter(k => k.includes(' '));
+                const allPhrases = [...Object.keys(PHRASE_DB), ...customPhrases].sort((a, b) => b.length - a.length);
+                if (allPhrases.length === 0) return null;
+                return new RegExp(`\\b(${allPhrases.join('|')})\\b`, 'gi');
+            }, [activeDicts]);
+
+            const handleToggleTrans = async (e) => {
+                e.stopPropagation(); 
+                if (showTranslation) { setShowTranslation(false); return; }
+                if (translationText || localTranslation) { setShowTranslation(true); return; } 
+                
+                setIsLocalTransLoading(true); 
+                try {
+                    const trans = await callGeminiTranslation(text, apiConfig);
+                    setLocalTranslation(trans);
+                    setShowTranslation(true);
+                } catch (e) {
+                    window.showToast(`翻译异常: ${e.message}`, "error");
+                } finally {
+                    setIsLocalTransLoading(false); 
+                }
+            };
+
+            const handleToggleAnalysis = async (e) => {
+                e.stopPropagation();
+                if (showAnalysis) { setShowAnalysis(false); return; }
+                if (analysisData) { setShowAnalysis(true); return; }
+
+                setIsAnalysisLoading(true); 
+                try {
+                    const data = await callGeminiIntensiveAnalysis(text, apiConfig);
+                    setAnalysisData(data);
+                    setShowAnalysis(true);
+                } catch (e) {
+                    window.showToast(`句法解构异常: ${e.message}`, "error");
+                } finally {
+                    setIsAnalysisLoading(false);
+                }
+            };
+
+            const handleToggleAudio = async (e) => {
+                e.stopPropagation();
+                if (audioUrl) return; 
+                setIsAudioLoading(true); 
+                try {
+                    const url = await callGeminiTTS(text, apiConfig);
+                    setAudioUrl(url); 
+                } catch (e) {
+                    window.showToast(`语音合成异常: ${e.message}`, "error");
+                } finally {
+                    setIsAudioLoading(false);
+                }
+            };
+
+            const handleToggleQuiz = async (e) => {
+                e.stopPropagation();
+                if (showQuiz) { setShowQuiz(false); return; }
+                if (quizData) { setShowQuiz(true); return; }
+
+                setIsQuizLoading(true); 
+                try {
+                    const data = await callGeminiQuiz(text, apiConfig);
+                    setQuizData(data); 
+                    setShowQuiz(true);
+                } catch (e) {
+                    window.showToast(`出题系统异常: ${e.message}`, "error");
+                } finally {
+                    setIsQuizLoading(false);
+                }
+            };
+
+            const handleWordClick = (wordInfo) => setActiveNote({ ...wordInfo, isPhrase: false, contextSentence: text });
+
+            const handleDisambiguate = async (noteInfo) => {
+                setActiveNote(prev => ({ ...prev, isDisambiguating: true }));
+                try {
+                    const aiResult = await callGeminiWordDisambiguation(noteInfo.lemma || noteInfo.word, noteInfo.contextSentence, noteInfo.translation, apiConfig);
+                    setActiveNote(prev => ({ ...prev, aiContextMeaning: aiResult }));
+                } catch (e) {
+                    window.showToast(`精准释义超时`, "error");
+                } finally {
+                    setActiveNote(prev => ({ ...prev, isDisambiguating: false }));
+                }
+            };
+
+            if (!text.trim()) return null;
+
+            if (readingMode === 'pure') {
+                return (
+                    <div className="mb-8">
+                        <div className="text-gray-900 dark:text-gray-200 text-justify break-words" style={{ fontFamily: typographyConfig.fontFamily, fontSize: `${typographyConfig.fontSize}px`, lineHeight: typographyConfig.lineHeight }}>
+                            {text}
+                        </div>
+                    </div>
+                );
+            }
+
+            let textSegments = [{ text: text, isTarget: false }];
+            if (showAnalysis && analysisData?.complexSentences?.length > 0) {
+                analysisData.complexSentences.forEach(compObj => {
+                    let target = compObj.originalSentence?.trim();
+                    if (!target) return;
+                    let newSegments = [];
+                    textSegments.forEach(seg => {
+                        if (seg.isTarget) {
+                            newSegments.push(seg);
+                        } else {
+                            let idx = seg.text.indexOf(target);
+                            let matchedText = target;
+
+                            if (idx === -1) {
+                                const escaped = escapeRegExp(target);
+                                const flexStr = escaped.replace(/\s+/g, '\\s+').replace(/['’`]/g, "['’`]");
+                                try {
+                                    const flexRegex = new RegExp(flexStr, 'i');
+                                    const match = seg.text.match(flexRegex);
+                                    if (match) {
+                                        idx = match.index;
+                                        matchedText = match[0];
+                                    }
+                                } catch(e){}
+                            }
+                            
+                            if (idx === -1 && compObj.chunks && compObj.chunks.length > 0) {
+                                const firstChunk = compObj.chunks[0].text.trim();
+                                const lastChunk = compObj.chunks[compObj.chunks.length - 1].text.trim();
+                                if (firstChunk && lastChunk) {
+                                    try {
+                                        const flexFirst = new RegExp(escapeRegExp(firstChunk).replace(/\s+/g, '\\s+').replace(/['’`]/g, "['’`]"), 'i');
+                                        const flexLast = new RegExp(escapeRegExp(lastChunk).replace(/\s+/g, '\\s+').replace(/['’`]/g, "['’`]"), 'i');
+                                        
+                                        const matchFirst = seg.text.match(flexFirst);
+                                        if (matchFirst) {
+                                            const startIdx = matchFirst.index;
+                                            const remainingText = seg.text.substring(startIdx);
+                                            const matchLast = remainingText.match(flexLast);
+                                            if (matchLast) {
+                                                const endIdx = startIdx + matchLast.index + matchLast[0].length;
+                                                matchedText = seg.text.substring(startIdx, endIdx);
+                                                idx = startIdx;
+                                            }
+                                        }
+                                    } catch(e){}
+                                }
+                            }
+                            
+                            if (idx !== -1) {
+                                newSegments.push({ text: seg.text.substring(0, idx), isTarget: false });
+                                newSegments.push({ text: seg.text.substring(idx, idx + matchedText.length), isTarget: true });
+                                newSegments.push({ text: seg.text.substring(idx + matchedText.length), isTarget: false });
+                            } else {
+                                newSegments.push(seg);
+                            }
+                        }
+                    });
+                    textSegments = newSegments;
+                });
+            }
+
+            const renderProcessedText = (segmentText, isTarget) => {
+                let chunks = phraseRegex ? segmentText.split(phraseRegex) : [segmentText];
+
+                const content = chunks.map((chunk, index) => {
+                    const lowerChunk = chunk.toLowerCase();
+                    let phraseData = PHRASE_DB[lowerChunk];
+                    
+                    if (!phraseData) {
+                        for (const dict of activeDicts) {
+                            if (dict.data && dict.data[lowerChunk]) {
+                                phraseData = { trans: dict.data[lowerChunk], type: dict.type };
+                                break;
+                            }
+                        }
+                    }
+
+                    if (phraseData && lowerChunk.includes(' ') && highlightMode !== 'none') {
+                        const isRed = phraseData.type === 'hard';
+                        if (highlightMode === 'red' && !isRed) return <span key={index}>{chunk}</span>;
+                        if (highlightMode === 'blue' && isRed) return <span key={index}>{chunk}</span>;
+
+                        const isActive = activeNote && activeNote.word === chunk && activeNote.isPhrase;
+                        return (
+                            <span key={index} onClick={(e) => { e.stopPropagation(); setActiveNote({ word: chunk, isPhrase: true, trans: phraseData.trans || phraseData.translation, note: phraseData.note, type: phraseData.type }); }} className={`cursor-pointer mx-0.5 border-b-[2px] border-dashed transition-all duration-200 ${isActive ? 'border-sky-400 bg-sky-100/60 text-[#004b87] rounded-sm px-0.5 dark:bg-sky-900/50 dark:border-sky-500 dark:text-sky-200' : 'border-sky-300 hover:border-sky-400 hover:bg-sky-50 text-gray-900 dark:text-gray-200 dark:border-sky-700 dark:hover:bg-sky-900/30'}`}>{chunk}</span>
+                        );
+                    }
+                    return <WordHighlighter key={index} text={chunk} activeDicts={activeDicts} highlightMode={highlightMode} onWordClick={handleWordClick} />;
+                });
+                return isTarget ? <span className="bg-amber-200/50 dark:bg-amber-900/40 border-b-[2px] border-amber-300/80 dark:border-amber-700 px-[2px] rounded-sm transition-all duration-500 shadow-[0_0_10px_rgba(253,230,138,0.4)] dark:shadow-none">{content}</span> : content;
+            };
+
+            const finalTranslationToShow = translationText || localTranslation;
+
+            return (
+                <div 
+                    className="mb-14 relative group"
+                    onMouseEnter={() => setIsInteracting(true)}
+                    onMouseLeave={() => setIsInteracting(false)}
+                >
+                    <div 
+                        className="text-gray-900 dark:text-gray-200 text-justify break-words relative z-10 transition-all cursor-pointer md:cursor-auto"
+                        style={{ fontFamily: typographyConfig.fontFamily, fontSize: `${typographyConfig.fontSize}px`, lineHeight: typographyConfig.lineHeight }}
+                        onClick={handleParagraphClick}
+                    >
+                        {textSegments.map((seg, i) => <Fragment key={i}>{renderProcessedText(seg.text, seg.isTarget)}</Fragment>)}
+                    </div>
+
+                    {activeNote && (
+                        <div className="mt-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl animate-fade-in-down relative shadow-lg z-20">
+                            <button onClick={() => setActiveNote(null)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full p-1 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                            <div className="flex items-center space-x-2 mb-2">
+                                <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm tracking-wider ${activeNote.type === 'hard' ? 'bg-red-600 dark:bg-red-700' : 'bg-sky-600 dark:bg-sky-700'}`}>{activeNote.isPhrase ? "语法与佳句" : (activeNote.type === 'hard' ? "考研生词" : "词库匹配")}</span>
+                                <span className={`font-serif font-bold text-[15px] ${activeNote.type === 'hard' ? 'text-red-800 dark:text-red-400' : 'text-[#004b87] dark:text-sky-300'}`}>{activeNote.word}</span>
+                                {activeNote.lemma && activeNote.lemma !== activeNote.word.toLowerCase() && <span className="text-[12px] text-gray-400 dark:text-gray-500 font-mono">({activeNote.lemma})</span>}
+                            </div>
+                            <div className="text-[13px] font-semibold text-gray-800 dark:text-gray-200 mb-2 whitespace-pre-wrap">{activeNote.translation || activeNote.trans}</div>
+                            {activeNote.note && <div className="text-[13.5px] text-gray-700 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-700">{activeNote.note}</div>}
+                            
+                            {!activeNote.isPhrase && (
+                                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                    <button onClick={() => handleDisambiguate(activeNote)} disabled={activeNote.isDisambiguating} className="flex items-center text-[12px] font-medium text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 px-3 py-1.5 rounded-lg transition-colors active:scale-95">
+                                        {activeNote.isDisambiguating ? "AI 分析语境中..." : "🤖 结合语境精判该词意思"}
+                                    </button>
+                                    {activeNote.aiContextMeaning && <div className="mt-3 p-3 bg-purple-50/60 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-900/50 rounded-lg text-[13px] text-purple-900 dark:text-purple-200 leading-relaxed animate-fade-in"><span className="font-bold mr-1">精准释义：</span>{activeNote.aiContextMeaning}</div>}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <div className={`flex flex-wrap items-center gap-2 transition-all duration-300 ease-in-out overflow-hidden origin-top ${showActions ? 'max-h-[150px] opacity-100 mt-4 scale-y-100' : 'max-h-0 opacity-0 mt-0 scale-y-95 pointer-events-none'}`}>
+                        <button 
+                            onClick={handleToggleTrans} 
+                            disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow} 
+                            className={`flex items-center space-x-1.5 text-[11px] font-medium border px-3.5 py-1.5 rounded-full transition-all ${showTranslation ? 'bg-gray-800 dark:bg-gray-700 text-white border-gray-800 dark:border-gray-600' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 shadow-sm'}`}
+                        >
+                            <span className="font-serif italic text-[11px]">文A</span>
+                            <span>{(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? "处理中..." : showTranslation ? "收起精翻" : "展开精翻"}</span>
+                        </button>
+
+                        {isConsideredParagraph && (
+                            <button onClick={handleToggleAnalysis} disabled={isAnalysisLoading} className={`flex items-center space-x-1.5 text-[11px] font-medium border px-3.5 py-1.5 rounded-full transition-all ${showAnalysis ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800' : 'bg-white dark:bg-gray-800 text-amber-700 dark:text-amber-500 border-amber-200 dark:border-gray-700 hover:bg-amber-50 dark:hover:bg-gray-700 shadow-sm'}`}>
+                                {isAnalysisLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2-1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>}
+                                <span>{isAnalysisLoading ? "智能解构中..." : showAnalysis ? "收起句法" : "长难句解构"}</span>
+                            </button>
+                        )}
+                        {!audioUrl && isConsideredParagraph && (
+                             <button onClick={handleToggleAudio} disabled={isAudioLoading} className={`flex items-center space-x-1.5 text-[11px] font-medium border px-3.5 py-1.5 rounded-full transition-all bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 shadow-sm`}>
+                                {isAudioLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <span>🎙️</span> }
+                                <span>{isAudioLoading ? "音频请求中..." : "外教领读"}</span>
+                             </button>
+                        )}
+                        {isConsideredParagraph && (
+                             <button onClick={handleToggleQuiz} disabled={isQuizLoading} className={`flex items-center space-x-1.5 text-[11px] font-medium border px-3.5 py-1.5 rounded-full transition-all ${showQuiz ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800' : 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700 shadow-sm'}`}>
+                                {isQuizLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <span>📝</span> }
+                                <span>{isQuizLoading ? "预测中..." : showQuiz ? "收起模拟题" : "出题测试"}</span>
+                             </button>
+                        )}
+                    </div>
+
+                    {audioUrl && <div className="mt-3 animate-fade-in-down w-full max-w-sm"><audio src={audioUrl} controls className="h-9 w-full rounded-full" autoPlay /></div>}
+                    
+                    {showTranslation && finalTranslationToShow && <div className="mt-4 text-gray-800 dark:text-gray-300 font-sans animate-fade-in-down whitespace-pre-wrap border-l-[3px] border-gray-300 dark:border-gray-600 pl-4 py-1 bg-gray-50/50 dark:bg-gray-800/50 rounded-r-lg" style={{ fontSize: `${Math.max(14, typographyConfig.fontSize - 2)}px`, lineHeight: typographyConfig.lineHeight }}>{finalTranslationToShow}</div>}
+                    
+                    {showAnalysis && analysisData && <SyntaxBreakdowns data={analysisData} />}
+                    {showQuiz && quizData && (
+                        <div className="mt-4 p-5 bg-purple-50/60 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/50 rounded-2xl animate-fade-in-down shadow-sm">
+                             <div className="flex items-center space-x-2 mb-4"><span className="bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Reading Comprehension</span></div>
+                             <p className="text-[15px] font-serif font-bold text-gray-900 dark:text-gray-100 mb-1">{quizData.questionEn}</p>
+                             <p className="text-[12.5px] text-gray-500 dark:text-gray-400 mb-5">{quizData.questionZh}</p>
+                             <div className="space-y-2">
+                                 {quizData.options.map((opt) => {
+                                     const showStatus = selectedOption !== null;
+                                     let btnClass = "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-purple-300 dark:hover:border-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20";
+                                     if (showStatus) {
+                                         if (opt.id === quizData.correctAnswerId) btnClass = "border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20 text-green-900 dark:text-green-300";
+                                         else if (selectedOption === opt.id) btnClass = "border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300";
+                                         else btnClass = "border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-gray-400 dark:text-gray-600";
+                                     }
+                                     return (
+                                         <button key={opt.id} onClick={() => !showStatus && setSelectedOption(opt.id)} disabled={showStatus} className={`w-full text-left p-3 rounded-xl border transition-all duration-200 flex flex-col ${btnClass}`}>
+                                             <span className="text-[14px] font-serif font-medium">{opt.id}. {opt.textEn}</span>
+                                             {showStatus && <span className="text-[12px] mt-1 opacity-80">{opt.textZh}</span>}
+                                         </button>
+                                     );
+                                 })}
+                             </div>
+                             {selectedOption && (
+                                 <div className="mt-5 p-4 bg-white dark:bg-gray-800 rounded-xl border border-purple-100 dark:border-purple-900/50 animate-fade-in-down">
+                                        <div className="flex items-center space-x-2 mb-2">
+                                             {selectedOption === quizData.correctAnswerId ? <span className="text-green-600 dark:text-green-400 font-bold text-[14px]">✅ 回答正确</span> : <span className="text-red-500 dark:text-red-400 font-bold text-[14px]">❌ 回答错误 (正确答案: {quizData.correctAnswerId})</span>}
+                                        </div>
+                                        <div className="text-[13px] text-gray-700 dark:text-gray-300 leading-relaxed text-justify"><span className="font-bold text-purple-700 dark:text-purple-400 mr-1">名师解析：</span>{quizData.analysis}</div>
+                                 </div>
+                             )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const DEFAULT_API_CONFIG = { apiType: 'gemini', key: '', model: 'gemini-2.0-flash', baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta' };
+        const DEFAULT_TYPOGRAPHY_CONFIG = { fontFamily: '"Noto Serif SC", STSong, "Times New Roman", serif', fontSize: 17, lineHeight: 2.4, paddingX: 6, theme: 'light' };
+        const LOCAL_STORAGE_KEY = 'yang-reader-state-v1';
+
+        const App = () => {
+            const localState = useMemo(() => {
+                try {
+                    return JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) || '{}') || {};
+                } catch (error) {
+                    console.warn('Local state restore failed:', error);
+                    return {};
+                }
+            }, []);
+
+            const persistLocalState = (patch) => {
+                try {
+                    const previous = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) || '{}') || {};
+                    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ ...previous, ...patch }));
+                } catch (error) {
+                    console.warn('Local state save failed:', error);
+                }
+            };
+
+            const [apiConfig, setApiConfig] = useState({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}) });
+            const [isApiModalOpen, setIsApiModalOpen] = useState(false);
+            const [tempApiConfig, setTempApiConfig] = useState({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}) });
+
+            const [typographyConfig, setTypographyConfig] = useState({ ...DEFAULT_TYPOGRAPHY_CONFIG, ...(localState.typographyConfig || {}) });
+            const [isTypographyModalOpen, setIsTypographyModalOpen] = useState(false);
+            const [tempTypographyConfig, setTempTypographyConfig] = useState({ ...DEFAULT_TYPOGRAPHY_CONFIG, ...(localState.typographyConfig || {}) });
+
+            const [inputText, setInputText] = useState("");
+            const [isReadingMode, setIsReadingMode] = useState(false);
+            const [readingMode, setReadingMode] = useState('intensive'); 
+            
+            const [highlightMode, setHighlightMode] = useState('both'); 
+            
+            const [fullTranslations, setFullTranslations] = useState([]);
+            const [isFullTransLoading, setIsFullTransLoading] = useState(false);
+
+            const [showGlobalLogic, setShowGlobalLogic] = useState(false);
+            const [globalLogicData, setGlobalLogicData] = useState(null);
+            const [isGlobalLogicLoading, setIsGlobalLogicLoading] = useState(false);
+
+            const [isAnalyzingMap, setIsAnalyzingMap] = useState(false);
+            const [fullMapData, setFullMapData] = useState(null);
+            const [mapMode, setMapMode] = useState('bilingual'); 
+            const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+            const [mapScale, setMapScale] = useState(1);
+
+            const [isExtracting, setIsExtracting] = useState(false);
+            const fileInputRef = useRef(null);
+
+            const [isDictModalOpen, setIsDictModalOpen] = useState(false);
+            const [dictInputText, setDictInputText] = useState("");
+            const [customDict, setCustomDict] = useState(localState.customDict || {});
+            
+            const [presetDict, setPresetDict] = useState({});
+            const [hardDict, setHardDict] = useState({});
+
+            const [history, setHistory] = useState(localState.history || []);
+            const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+            const [currentHistoryId, setCurrentHistoryId] = useState(null);
+            const [user, setUser] = useState(null);
+
+            const [dbInstance, setDbInstance] = useState(null);
+            const [authInstance, setAuthInstance] = useState(null);
+            const [corpusCount, setCorpusCount] = useState(0);
+
+            const activeDicts = useMemo(() => [
+                { data: hardDict, type: 'hard' },
+                { data: customDict, type: 'custom' },
+                { data: presetDict, type: 'preset' },
+                { data: VOCAB_DB.kaoyan, type: 'default' },
+                { data: VOCAB_DB.cet6, type: 'default' }
+            ], [hardDict, customDict, presetDict]);
+            
+            useEffect(() => {
+                fetchAndParseCorpus(setCorpusCount);
+                fetch(PRESET_DICT_URL).then(r=>r.text()).then(t=>setPresetDict(parseDictText(t))).catch(console.error);
+                fetch(HARD_DICT_URL).then(r=>r.text()).then(t=>setHardDict(parseDictText(t))).catch(console.error);
+            }, []);
+
+            useEffect(() => {
+                let isMounted = true;
+                const checkFirebase = setInterval(() => {
+                    if (window.firebaseImports && isMounted) {
+                        clearInterval(checkFirebase);
+                        const { initializeApp, getAuth, getFirestore } = window.firebaseImports;
+                        try {
+                            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+                            if (Object.keys(firebaseConfig).length > 0) {
+                                const app = initializeApp(firebaseConfig);
+                                setAuthInstance(getAuth(app));
+                                setDbInstance(getFirestore(app));
+                            }
+                        } catch (e) { console.error("Firebase config error"); }
+                    }
+                }, 100);
+                return () => { isMounted = false; clearInterval(checkFirebase); };
+            }, []);
+
+            useEffect(() => {
+                if (!authInstance || !window.firebaseImports) return;
+                const { signInWithCustomToken, signInAnonymously, onAuthStateChanged } = window.firebaseImports;
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(authInstance, __initial_auth_token);
+                        else await signInAnonymously(authInstance);
+                    } catch(e) {}
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(authInstance, setUser);
+                return () => unsubscribe();
+            }, [authInstance]);
+
+            useEffect(() => {
+                if (!user || !dbInstance || !window.firebaseImports) return;
+                const { collection, doc, onSnapshot } = window.firebaseImports;
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+                const unsubHistory = onSnapshot(collection(dbInstance, 'artifacts', appId, 'users', user.uid, 'history'), 
+                    (snapshot) => {
+                        const historyData = snapshot.docs.map(document => ({ id: document.id, ...document.data() }));
+                        const sortedHistory = historyData.sort((a, b) => b.createdAt - a.createdAt);
+                        setHistory(sortedHistory);
+                        persistLocalState({ history: sortedHistory });
+                    },
+                    (error) => { console.error("History sync error:", error); }
+                );
+
+                const unsubDict = onSnapshot(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'dictionary'), 
+                    (docSnap) => {
+                        if (docSnap.exists()) {
+                            const vocab = docSnap.data().vocab || {};
+                            setCustomDict(vocab);
+                            persistLocalState({ customDict: vocab });
+                        }
+                    }
+                );
+
+                const unsubApi = onSnapshot(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'apiConfig'), 
+                    (docSnap) => {
+                        if (docSnap.exists()) {
+                            const data = { ...DEFAULT_API_CONFIG, ...docSnap.data() };
+                            setApiConfig(data);
+                            setTempApiConfig(data);
+                            persistLocalState({ apiConfig: data });
+                        }
+                    }
+                );
+
+                const unsubTypography = onSnapshot(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'typography'), 
+                    (docSnap) => {
+                        if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            // 确保旧数据也有 theme 字段
+                            const fullData = { ...DEFAULT_TYPOGRAPHY_CONFIG, ...data };
+                            setTypographyConfig(fullData);
+                            setTempTypographyConfig(fullData);
+                            persistLocalState({ typographyConfig: fullData });
+                        }
+                    }
+                );
+
+                return () => { unsubHistory(); unsubDict(); unsubApi(); unsubTypography(); };
+            }, [user, dbInstance]);
+
+            const handleToggleTheme = () => {
+                const newTheme = typographyConfig.theme === 'dark' ? 'light' : 'dark';
+                const newConfig = { ...typographyConfig, theme: newTheme };
+                setTypographyConfig(newConfig);
+                setTempTypographyConfig(newConfig);
+                persistLocalState({ typographyConfig: newConfig });
+                
+                if (user && dbInstance && window.firebaseImports) {
+                    const { doc, setDoc } = window.firebaseImports;
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'typography'), newConfig, { merge: true }).catch(()=>{});
+                }
+            };
+
+            const handleSaveApiConfig = async () => {
+                setApiConfig(tempApiConfig);
+                persistLocalState({ apiConfig: tempApiConfig });
+                setIsApiModalOpen(false);
+                if (user && dbInstance && window.firebaseImports) {
+                    const { doc, setDoc } = window.firebaseImports;
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    try {
+                        await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'apiConfig'), tempApiConfig, { merge: true });
+                        window.showToast("API 配置已更新并同步至云端", "success");
+                    } catch(e) { window.showToast("同步配置失败", "error"); }
+                } else {
+                    window.showToast("API 配置已保存到本地", "success");
+                }
+            };
+
+            const handleSaveTypography = async () => {
+                setTypographyConfig(tempTypographyConfig);
+                persistLocalState({ typographyConfig: tempTypographyConfig });
+                setIsTypographyModalOpen(false);
+                if (user && dbInstance && window.firebaseImports) {
+                    const { doc, setDoc } = window.firebaseImports;
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    try {
+                        await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'typography'), tempTypographyConfig, { merge: true });
+                        window.showToast("排版设置已更新并同步至云端", "success");
+                    } catch(e) { window.showToast("排版同步失败", "error"); }
+                } else {
+                    window.showToast("排版设置已保存到本地", "success");
+                }
+            };
+
+            const saveHistoryToCloud = async (record) => {
+                const normalizedRecord = { ...record, createdAt: record.createdAt || Date.now() };
+                setHistory(prevHistory => {
+                    const nextHistory = [normalizedRecord, ...prevHistory.filter(item => item.id !== normalizedRecord.id)]
+                        .sort((a, b) => b.createdAt - a.createdAt);
+                    persistLocalState({ history: nextHistory });
+                    return nextHistory;
+                });
+
+                if (!user || !dbInstance || !window.firebaseImports) return; 
+                const { doc, setDoc } = window.firebaseImports;
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                try { await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'history', normalizedRecord.id), normalizedRecord, { merge: true }); } catch(e) {}
+            };
+
+            const handleSaveCustomDict = async () => {
+                if (!dictInputText.trim()) return;
+                const newVocab = { ...customDict, ...parseDictText(dictInputText) };
+                setCustomDict(newVocab);
+                persistLocalState({ customDict: newVocab });
+                setIsDictModalOpen(false); 
+                setDictInputText("");
+                if (user && dbInstance && window.firebaseImports) {
+                    const { doc, setDoc } = window.firebaseImports;
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    try {
+                        await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'dictionary'), { vocab: newVocab }, { merge: true });
+                        window.showToast("词库已更新并同步至云端", "success");
+                    } catch(e) { window.showToast("同步词库失败", "error"); }
+                } else {
+                    window.showToast("词库已保存到本地", "success");
+                }
+            };
+
+            const fetchFullTranslation = async (text, recordId) => {
+                setIsFullTransLoading(true);
+                try {
+                    const res = await callGeminiFullTranslation(text, apiConfig);
+                    if (res) {
+                        const transArray = res.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                        setFullTranslations(transArray);
+                        if (recordId && history.length > 0) {
+                            const recordToUpdate = history.find(item => item.id === recordId) || { id: recordId, text };
+                            saveHistoryToCloud({ ...recordToUpdate, fullTranslations: transArray });
+                        }
+                    }
+                } catch (e) {
+                    window.showToast(`全局翻译被拦截，可点击段落独立精翻。\n(${e.message})`, "warning");
+                } finally { setIsFullTransLoading(false); }
+            };
+
+            const loadHistoryRecord = (record) => {
+                setInputText(record.text);
+                setFullMapData(record.fullMapData); 
+                setFullTranslations(record.fullTranslations || []);
+                setCurrentHistoryId(record.id);
+                setIsReadingMode(true);
+                setIsHistoryDrawerOpen(false);
+                if (!record.fullTranslations || record.fullTranslations.length === 0) {
+                    fetchFullTranslation(record.text, record.id);
+                }
+            };
+
+            const deleteHistoryRecord = async (id, e) => {
+                e.stopPropagation();
+                setHistory(prevHistory => {
+                    const nextHistory = prevHistory.filter(record => record.id !== id);
+                    persistLocalState({ history: nextHistory });
+                    return nextHistory;
+                });
+                if (currentHistoryId === id) setCurrentHistoryId(null);
+
+                if (!user || !dbInstance || !window.firebaseImports) return;
+                const { doc, deleteDoc } = window.firebaseImports;
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                try {
+                    await deleteDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'history', id));
+                } catch(e) { window.showToast("删除记录失败", "error"); }
+            };
+
+            const clearAllHistory = () => {
+                const confirmed = window.confirm("确定要清空所有阅读历史吗？");
+                if (confirmed) {
+                    setHistory([]);
+                    persistLocalState({ history: [] });
+                    setCurrentHistoryId(null);
+                }
+
+                if (confirmed && user && dbInstance && window.firebaseImports) {
+                    const { doc, deleteDoc } = window.firebaseImports;
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                    history.forEach(async (record) => {
+                        await deleteDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'history', record.id));
+                    });
+                    window.showToast("云端记录已清空", "success");
+                } else if (confirmed) {
+                    window.showToast("本地记录已清空", "success");
+                }
+            };
+
+            const defaultText = `France, which prides itself as the global innovator of fashion, has decided its fashion industry has lost an absolute right to define physical beauty for women. Its lawmakers gave preliminary approval last week to a law that would make it a crime to employ ultra-thin models on runways. The parliament also agreed to ban websites that "incite excessive thinness" by promoting extreme dieting.`;
+
+            const handleStartReading = () => {
+                const finalContent = inputText.trim() || defaultText;
+                setInputText(finalContent);
+                setIsReadingMode(true);
+                setFullMapData(null); 
+                setShowGlobalLogic(false);
+                setGlobalLogicData(null);
+                setFullTranslations([]); 
+
+                const newId = Date.now().toString();
+                setCurrentHistoryId(newId);
+                const newRecord = { 
+                    id: newId, timestamp: new Date().toLocaleString('zh-CN'), 
+                    text: finalContent, fullMapData: null, fullTranslations: [], createdAt: Date.now() 
+                };
+                saveHistoryToCloud(newRecord);
+                fetchFullTranslation(finalContent, newId);
+            };
+
+            const handleFileUpload = async (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+                for (let file of files) {
+                    if (file.size > 4 * 1024 * 1024) {
+                        window.showToast(`文件 ${file.name} 超过 4MB，为避免卡死请拆分后上传`, "error");
+                        return;
+                    }
+                }
+                setIsExtracting(true);
+                let combinedText = "";
+                try {
+                    for (let i = 0; i < files.length; i++) {
+                        const base64Data = await new Promise((res) => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => res(reader.result.split(',')[1]);
+                            reader.readAsDataURL(files[i]);
+                        });
+                        combinedText += (combinedText ? '\n\n' : '') + await extractTextFromMedia(base64Data, files[i].type, apiConfig);
+                    }
+                    setInputText(prev => prev + (prev ? '\n\n' : '') + combinedText);
+                    window.showToast("文件提取成功！请点击进入精读以保存记录", "success");
+                } catch (err) { window.showToast(err.message, "error"); }
+                setIsExtracting(false);
+                if(fileInputRef.current) fileInputRef.current.value = '';
+            };
+
+            const handleGenerateSummary = async () => {
+                setIsAnalyzingMap(true);
+                try {
+                    const data = await callGeminiSummary(inputText || defaultText, apiConfig);
+                    setFullMapData(data);
+                    if (currentHistoryId) {
+                        const recordToUpdate = history.find(item => item.id === currentHistoryId) || {
+                            id: currentHistoryId,
+                            timestamp: new Date().toLocaleString('zh-CN'),
+                            text: inputText || defaultText,
+                            fullTranslations,
+                            createdAt: Date.now()
+                        };
+                        saveHistoryToCloud({ ...recordToUpdate, fullMapData: data });
+                    }
+                    window.showToast(user && dbInstance ? "已自动保存导图至云端" : "已自动保存导图到本地", "success");
+                } catch (e) { window.showToast(`导图解析失败: ${e.message}`, "error"); } 
+                finally {
+                    setIsAnalyzingMap(false);
+                    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+                }
+            };
+
+            const handleToggleGlobalLogic = async () => {
+                if (showGlobalLogic) { setShowGlobalLogic(false); return; }
+                if (globalLogicData) { 
+                    setShowGlobalLogic(true); 
+                    setTimeout(() => { document.getElementById('global-logic-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
+                    return; 
+                }
+                setIsGlobalLogicLoading(true);
+                try {
+                    const data = await callGeminiReadingAnalysis(inputText || defaultText, apiConfig);
+                    setGlobalLogicData(data);
+                    setShowGlobalLogic(true);
+                    setTimeout(() => { document.getElementById('global-logic-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
+                } catch (e) { window.showToast(`全文逻辑剖析失败: ${e.message}`, "error"); } 
+                finally { setIsGlobalLogicLoading(false); }
+            };
+
+            const paragraphs = useMemo(() => inputText.split(/\n+/).filter(p => p.trim() !== ''), [inputText]);
+
+            return (
+                <div className={typographyConfig.theme === 'dark' ? 'dark' : ''}>
+                    <div className="min-h-screen bg-[#F9FAFB] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans pb-24 relative overflow-x-hidden transition-colors duration-300">
+                        
+                        {/* 排版设置弹窗 */}
+                        {isTypographyModalOpen && (
+                            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-gray-900/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setIsTypographyModalOpen(false)}></div>
+                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg relative z-10 p-6 animate-fade-in-down border border-gray-100 dark:border-gray-700">
+                                    <h2 className="text-[16px] font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
+                                        <svg className="w-4 h-4 mr-1.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10M9 8h6m-7 4h8m-9 4h10M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"></path></svg>
+                                        阅读排版设置
+                                    </h2>
+                                    
+                                    <div className="p-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl mb-5 overflow-hidden flex items-center justify-center min-h-[100px] transition-all duration-300"
+                                         style={{
+                                             fontFamily: tempTypographyConfig.fontFamily,
+                                             fontSize: `${tempTypographyConfig.fontSize}px`,
+                                             lineHeight: tempTypographyConfig.lineHeight
+                                         }}>
+                                        <p className="text-center text-gray-800 dark:text-gray-200">France, which prides itself as the global innovator of fashion...</p>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        <div>
+                                            <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">字体样式</label>
+                                            <select 
+                                                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-blue-400 text-gray-800 dark:text-gray-200"
+                                                value={tempTypographyConfig.fontFamily}
+                                                onChange={e => setTempTypographyConfig({...tempTypographyConfig, fontFamily: e.target.value})}
+                                            >
+                                                <option value='"Noto Serif SC", STSong, "Times New Roman", serif'>优雅宋体 (Serif)</option>
+                                                <option value='"Noto Sans SC", "Microsoft YaHei", Arial, sans-serif'>现代黑体 (Sans-serif)</option>
+                                                <option value="'KaiTi', 'Kaiti SC', STKaiti, serif">护眼楷体 (KaiTi)</option>
+                                                <option value="Georgia, serif">经典外刊 (Georgia)</option>
+                                                <option value="'Courier New', Courier, monospace">极客等宽 (Monospace)</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                <label>字号大小</label>
+                                                <span className="text-blue-600 dark:text-blue-400">{tempTypographyConfig.fontSize} px</span>
+                                            </div>
+                                            <input type="range" min="12" max="30" step="1" className="w-full" value={tempTypographyConfig.fontSize} onChange={e => setTempTypographyConfig({...tempTypographyConfig, fontSize: parseInt(e.target.value)})} />
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                <label>段落行距</label>
+                                                <span className="text-blue-600 dark:text-blue-400">{tempTypographyConfig.lineHeight}</span>
+                                            </div>
+                                            <input type="range" min="1.2" max="3.5" step="0.1" className="w-full" value={tempTypographyConfig.lineHeight} onChange={e => setTempTypographyConfig({...tempTypographyConfig, lineHeight: parseFloat(e.target.value)})} />
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                <label>左右边距留白</label>
+                                                <span className="text-blue-600 dark:text-blue-400">{tempTypographyConfig.paddingX}%</span>
+                                            </div>
+                                            <input type="range" min="0" max="25" step="1" className="w-full" value={tempTypographyConfig.paddingX} onChange={e => setTempTypographyConfig({...tempTypographyConfig, paddingX: parseInt(e.target.value)})} />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end mt-8">
+                                        <button onClick={handleSaveTypography} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-[13px] font-medium hover:bg-blue-700 active:scale-95 transition-transform shadow-sm">
+                                            保存并应用排版
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {isHistoryDrawerOpen && (
+                            <div className="fixed inset-0 z-50 flex justify-end">
+                                <div className="absolute inset-0 bg-gray-900/30 dark:bg-black/50 backdrop-blur-sm transition-opacity" onClick={() => setIsHistoryDrawerOpen(false)}></div>
+                                <div className="w-full max-w-sm bg-white dark:bg-gray-900 h-full shadow-2xl relative flex flex-col animate-slide-in-right border-l border-gray-200 dark:border-gray-800">
+                                    <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                                        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center">
+                                            <svg className="w-5 h-5 mr-2 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                                            阅读库
+                                        </h2>
+                                        <button onClick={() => setIsHistoryDrawerOpen(false)} className="p-2 text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                                    </div>
+                                    <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-100 dark:border-blue-900/50 text-[12px] text-blue-800 dark:text-blue-300 leading-relaxed text-justify">
+                                        💡 提示：点击“进入精读”后，文章会自动保存到本地；如配置了 Firebase 沙盒环境，也会同步至云端。
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-3 custom-scrollbar bg-[#F9FAFB] dark:bg-gray-900">
+                                        {history.length === 0 ? (
+                                            <div className="text-center text-gray-400 mt-20 text-sm">暂无阅读记录，去精读一篇吧</div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {history.map((record) => (
+                                                    <div key={record.id} onClick={() => loadHistoryRecord(record)} className={`p-4 rounded-xl border cursor-pointer group transition-all ${currentHistoryId === record.id ? 'bg-gray-900 dark:bg-gray-800 border-gray-900 dark:border-gray-600 text-white shadow-md' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-sky-300 dark:hover:border-sky-600 shadow-sm'}`}>
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div className={`text-xs font-medium ${currentHistoryId === record.id ? 'text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>{record.timestamp}</div>
+                                                            <button onClick={(e) => deleteHistoryRecord(record.id, e)} className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity ${currentHistoryId === record.id ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400'}`}><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                                                        </div>
+                                                        <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{window.getExcerpt(record.text)}</div>
+                                                        <div className="mt-3 flex flex-wrap gap-2 items-center text-[10px] font-medium">
+                                                            {record.fullMapData && <span className={`px-2 py-0.5 rounded-sm flex items-center ${currentHistoryId === record.id ? 'bg-gray-700 text-gray-300' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-800'}`}><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"></path></svg>已保存逻辑树</span>}
+                                                            {record.fullTranslations?.length > 0 && <span className={`px-2 py-0.5 rounded-sm flex items-center ${currentHistoryId === record.id ? 'bg-gray-700 text-gray-300' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-800'}`}><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path></svg>已缓存全局翻译</span>}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {history.length > 0 && <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900"><button onClick={clearAllHistory} className="w-full py-2.5 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">清空阅读记录</button></div>}
+                                </div>
+                            </div>
+                        )}
+
+                        {isDictModalOpen && (
+                            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-gray-900/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setIsDictModalOpen(false)}></div>
+                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg relative z-10 p-6 animate-fade-in-down border border-gray-100 dark:border-gray-700">
+                                    <h2 className="text-[16px] font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center">
+                                        <svg className="w-4 h-4 mr-1.5 text-amber-600 dark:text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg>
+                                        自定义个人词库
+                                    </h2>
+                                    <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">在此添加你自己的专属生词本（支持 单词=释义 格式）。保存后数据会持久化在本地；如有 Firebase 环境则同步至云端。</p>
+                                    <textarea className="w-full h-40 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg font-mono text-[13px] border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 mb-4 outline-none focus:border-amber-400" placeholder="在此粘贴文本..." value={dictInputText} onChange={(e) => setDictInputText(e.target.value)} />
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[12px] text-gray-400 font-medium">已保存词汇: {Object.keys(customDict).length}</span>
+                                        <button onClick={handleSaveCustomDict} className="px-5 py-2 bg-amber-600 text-white rounded-lg text-[13px] hover:bg-amber-700 active:scale-95 transition-transform">追加并保存</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* API 与模型设定弹窗 */}
+                        {isApiModalOpen && (
+                            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                                <div className="absolute inset-0 bg-gray-900/40 dark:bg-black/60 backdrop-blur-sm" onClick={() => setIsApiModalOpen(false)}></div>
+                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl relative z-10 p-6 animate-fade-in-down border border-gray-100 dark:border-gray-700">
+                                    <h2 className="text-[16px] font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center">
+                                        <svg className="w-4 h-4 mr-1.5 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                                        大模型 API 路由中心
+                                    </h2>
+                                    <div className="p-3 bg-purple-50 dark:bg-purple-900/20 text-purple-800 dark:text-purple-300 text-[12px] leading-relaxed rounded-lg mb-4 border border-purple-100 dark:border-purple-800/50 flex flex-col gap-2">
+                                        <p>🚀 完全解禁大模型限制。你可以接入自己的 Google API，也可以无缝接入<strong>阿里云 (Qwen)</strong> 等兼容 OpenAI 格式的大模型 API。</p>
+                                        <div className="flex gap-2 mt-1">
+                                            <button 
+                                                onClick={() => setTempApiConfig({ apiType: 'openai', key: '', model: 'qwen-plus', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', apiVersion: 'v1beta' })}
+                                                className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 rounded-md hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors shadow-sm"
+                                            >
+                                                ⚡ 一键填入阿里云(Qwen)配置
+                                            </button>
+                                            <button 
+                                                onClick={() => setTempApiConfig({ apiType: 'gemini', key: '', model: 'gemini-2.0-flash', baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta' })}
+                                                className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors shadow-sm"
+                                            >
+                                                🇬 一键填入 Google Gemini 配置
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="flex gap-3">
+                                            <div className="w-1/3">
+                                                <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">接口协议类型</label>
+                                                <select 
+                                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-purple-400 text-gray-800 dark:text-gray-200"
+                                                    value={tempApiConfig.apiType || 'gemini'}
+                                                    onChange={e => setTempApiConfig({...tempApiConfig, apiType: e.target.value})}
+                                                >
+                                                    <option value="gemini">Google Gemini 原生协议</option>
+                                                    <option value="openai">OpenAI 兼容协议 (阿里云等)</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">API Base URL (代理地址)</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-purple-400 text-gray-800 dark:text-gray-200"
+                                                    placeholder={tempApiConfig.apiType === 'openai' ? "https://dashscope.aliyuncs.com/compatible-mode/v1" : "https://generativelanguage.googleapis.com"}
+                                                    value={tempApiConfig.baseUrl}
+                                                    onChange={e => setTempApiConfig({...tempApiConfig, baseUrl: e.target.value})}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-3">
+                                            {tempApiConfig.apiType === 'gemini' && (
+                                                <div className="w-1/3">
+                                                    <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">API 版本</label>
+                                                    <select 
+                                                        className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-purple-400 text-gray-800 dark:text-gray-200"
+                                                        value={tempApiConfig.apiVersion || 'v1beta'}
+                                                        onChange={e => setTempApiConfig({...tempApiConfig, apiVersion: e.target.value})}
+                                                    >
+                                                        <option value="v1beta">v1beta (标准)</option>
+                                                        <option value="v1alpha">v1alpha (实验)</option>
+                                                        <option value="v1">v1 (正式)</option>
+                                                    </select>
+                                                </div>
+                                            )}
+                                            <div className="flex-1">
+                                                <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">模型名称 (Model)</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-purple-400 text-gray-800 dark:text-gray-200"
+                                                    placeholder={tempApiConfig.apiType === 'openai' ? "如: qwen-plus" : "如: gemini-2.0-flash"}
+                                                    value={tempApiConfig.model}
+                                                    onChange={e => setTempApiConfig({...tempApiConfig, model: e.target.value})}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">大模型 API Key</label>
+                                            <input 
+                                                type="password" 
+                                                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-purple-400 text-gray-800 dark:text-gray-200"
+                                                placeholder="sk-..."
+                                                value={tempApiConfig.key}
+                                                onChange={e => setTempApiConfig({...tempApiConfig, key: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end mt-6">
+                                        <button onClick={handleSaveApiConfig} className="px-5 py-2 bg-purple-600 text-white rounded-lg text-[13px] font-medium hover:bg-purple-700 active:scale-95 transition-transform shadow-sm">
+                                            保存并连接
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <header className="bg-white dark:bg-gray-900 sticky top-0 z-40 border-b border-gray-100 dark:border-gray-800 shadow-sm transition-colors">
+                            <div className="max-w-[850px] mx-auto px-5 py-3.5 flex justify-between items-center">
+                                <div className="flex items-center space-x-2">
+                                    <svg className="w-5 h-5 text-gray-800 dark:text-gray-200" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
+                                    <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 tracking-tight whitespace-nowrap">杨的外刊阅读器</h1>
+                                </div>
+                                <div className="flex items-center space-x-2 overflow-x-auto custom-scrollbar">
+                                    <button onClick={handleToggleTheme} className="text-[14px] font-medium text-amber-500 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-2.5 py-1.5 rounded flex items-center transition-colors whitespace-nowrap border border-gray-200 dark:border-gray-700">
+                                        {typographyConfig.theme === 'dark' ? '☀️ 日间' : '🌙 夜间'}
+                                    </button>
+                                    <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50/80 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-md text-[11px] font-medium border border-emerald-100/50 dark:border-emerald-800/50 whitespace-nowrap">
+                                        <span>考研真题: {corpusCount}句</span><span className="w-px h-3 bg-emerald-200 dark:bg-emerald-700"></span>
+                                        <span>预设库: {Object.keys(presetDict).length}词</span><span className="w-px h-3 bg-emerald-200 dark:bg-emerald-700"></span>
+                                        <span className="text-red-600 dark:text-red-400 font-bold">生词本: {Object.keys(hardDict).length}词</span>
+                                    </div>
+                                    <button onClick={() => setIsTypographyModalOpen(true)} className="text-[12px] font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 px-2.5 py-1.5 rounded flex items-center transition-colors whitespace-nowrap">
+                                        🎨 排版设置
+                                    </button>
+                                    <button onClick={() => setIsApiModalOpen(true)} className="text-[12px] font-medium text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 px-2.5 py-1.5 rounded flex items-center transition-colors whitespace-nowrap">
+                                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>模型配置
+                                    </button>
+                                    <button onClick={() => setIsDictModalOpen(true)} className="text-[12px] font-medium text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 px-2.5 py-1.5 rounded flex items-center transition-colors whitespace-nowrap">
+                                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>个人词库
+                                    </button>
+                                    <button onClick={() => setIsHistoryDrawerOpen(true)} className="text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 p-1.5 rounded flex items-center transition-colors shrink-0" title="阅读库"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg></button>
+                                    {isReadingMode && <button onClick={() => setIsReadingMode(false)} className="text-[12px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 shrink-0">退出阅读</button>}
+                                </div>
+                            </div>
+                        </header>
+
+                        <main className="max-w-3xl mx-auto sm:my-8 bg-white dark:bg-gray-900 sm:shadow-sm sm:border border-gray-100 dark:border-gray-800 sm:rounded-xl min-h-[85vh] transition-colors">
+                            {!isReadingMode ? (
+                                <div className="p-6 md:p-10 space-y-6 animate-fade-in">
+                                    <div className="flex flex-wrap gap-3 items-center border-b border-gray-100 dark:border-gray-800 pb-4">
+                                         <input type="file" accept="image/*, application/pdf" multiple className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+                                         <button onClick={() => fileInputRef.current?.click()} disabled={isExtracting} className="flex items-center text-[14px] font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                                             <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                             {isExtracting ? "高速解析中..." : "批量提取 (建议每份PDF < 4MB)"}
+                                         </button>
+                                    </div>
+                                    <textarea className="w-full h-[55vh] p-2 bg-transparent outline-none resize-none font-serif text-[15.5px] leading-relaxed text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600" placeholder="在此粘贴外刊文本，或使用上方按钮提取内容..." value={inputText} onChange={(e) => setInputText(e.target.value)} />
+                                    <button onClick={handleStartReading} disabled={isExtracting} className="w-full bg-gray-900 dark:bg-blue-600 text-white py-4 rounded-xl font-medium shadow-md text-[15px] hover:bg-gray-800 dark:hover:bg-blue-700 active:scale-[0.98] transition-transform">进入精读环境</button>
+                                </div>
+                            ) : (
+                                <article className="py-8 animate-fade-in relative transition-all" style={{ paddingLeft: `${typographyConfig.paddingX}%`, paddingRight: `${typographyConfig.paddingX}%` }}>
+                                    <div className="flex justify-center mb-10 items-center space-x-4">
+                                        <div className="bg-gray-100 dark:bg-gray-800 p-1 rounded-xl flex space-x-1 border border-gray-200 dark:border-gray-700">
+                                            <button onClick={() => setReadingMode('pure')} className={`px-6 py-2 rounded-lg text-[13px] font-medium transition-all flex items-center ${readingMode === 'pure' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>纯净文本</button>
+                                            <button onClick={() => setReadingMode('intensive')} className={`px-6 py-2 rounded-lg text-[13px] font-medium transition-all flex items-center ${readingMode === 'intensive' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>深度精读</button>
+                                        </div>
+                                        
+                                        {readingMode === 'intensive' && (
+                                            <div className="flex items-center space-x-4 animate-fade-in">
+                                                <div className="flex items-center space-x-2">
+                                                    <select 
+                                                        value={highlightMode} 
+                                                        onChange={(e) => setHighlightMode(e.target.value)} 
+                                                        className="w-auto h-8 px-2 rounded-md text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer shadow-sm"
+                                                    >
+                                                        <option value="both">✨ 全部高亮 (红+蓝)</option>
+                                                        <option value="red">🔴 仅考研生词 (红)</option>
+                                                        <option value="blue">🔵 仅基础词汇 (蓝)</option>
+                                                        <option value="none">⚪ 关闭高亮</option>
+                                                    </select>
+                                                </div>
+                                                <button onClick={handleToggleGlobalLogic} disabled={isGlobalLogicLoading} className={`flex items-center space-x-1.5 text-[12px] font-medium border px-3 py-1.5 rounded-lg transition-all ${showGlobalLogic ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800 shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                                                    {isGlobalLogicLoading ? <svg className="animate-spin w-3.5 h-3.5 loader-spin text-teal-600 dark:text-teal-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className={`w-3.5 h-3.5 ${showGlobalLogic ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> }
+                                                    <span>{isGlobalLogicLoading ? "剖析中..." : showGlobalLogic ? "收起全文逻辑" : "全文逻辑剖析"}</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-4 border-b border-gray-100 dark:border-gray-800 pb-16 mb-12">
+                                        {paragraphs.map((p, idx) => (
+                                            <Paragraph 
+                                                key={idx} 
+                                                text={p} 
+                                                activeDicts={activeDicts} 
+                                                readingMode={readingMode} 
+                                                highlightMode={highlightMode} 
+                                                translationText={fullTranslations[idx]} 
+                                                isTransLoading={isFullTransLoading} 
+                                                apiConfig={apiConfig}
+                                                typographyConfig={typographyConfig}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    {showGlobalLogic && globalLogicData && (
+                                        <div id="global-logic-section" className="mb-12 p-6 md:p-8 bg-teal-50/40 dark:bg-teal-900/10 border border-teal-100 dark:border-teal-900/50 rounded-2xl animate-fade-in shadow-sm font-sans">
+                                            <div className="flex items-center space-x-2 mb-6 border-b border-teal-100/50 dark:border-teal-900/50 pb-4"><span className="bg-teal-600 dark:bg-teal-700 text-white text-[12px] font-bold px-3 py-1.5 rounded uppercase tracking-wider flex items-center"><svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>全文考研逻辑解剖</span></div>
+                                            <div className="space-y-6">
+                                                <div><h4 className="text-[14px] font-bold text-teal-900 dark:text-teal-300 mb-2 flex items-center"><span className="mr-1.5">📌</span> 全局指代与语义连贯</h4><ul className="list-disc list-inside text-[14px] text-gray-700 dark:text-gray-300 space-y-1.5 ml-1 pl-4 marker:text-teal-400">{globalLogicData.referenceAnalysis.map((ref, idx) => <li key={idx} className="leading-relaxed">{ref}</li>)}</ul></div>
+                                                <div><h4 className="text-[14px] font-bold text-teal-900 dark:text-teal-300 mb-2 flex items-center"><span className="mr-1.5">🔗</span> 宏观逻辑结构拆解</h4><p className="text-[14px] text-gray-700 dark:text-gray-300 leading-[1.8] text-justify bg-white/70 dark:bg-gray-800/70 p-4 rounded-xl border border-teal-50 dark:border-teal-900">{globalLogicData.logicalStructure}</p></div>
+                                                {globalLogicData.synonymMapping?.length > 0 && (
+                                                    <div><h4 className="text-[14px] font-bold text-teal-900 dark:text-teal-300 mb-3 flex items-center"><span className="mr-1.5">🔄</span> 核心同义替换网络</h4><div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">{globalLogicData.synonymMapping.map((mapping, idx) => (<div key={idx} className="bg-white dark:bg-gray-800/70 p-3 rounded-xl border border-teal-50 dark:border-teal-900 flex flex-col shadow-sm"><span className="text-[12.5px] text-gray-400 font-mono line-through decoration-red-300 mb-1">{mapping.keyword}</span><span className="text-[14px] font-bold text-teal-700 dark:text-teal-400">{mapping.replacement}</span></div>))}</div></div>
+                                                )}
+                                                {globalLogicData.trapIdentification && globalLogicData.trapIdentification !== "无" && (
+                                                    <div><h4 className="text-[14px] font-bold text-red-700 dark:text-red-400 mb-2 flex items-center"><span className="mr-1.5">⚠️</span> 命题人陷阱预警</h4><p className="text-[14px] text-red-800/80 dark:text-red-300 leading-[1.8] bg-red-50/50 dark:bg-red-900/20 p-4 rounded-xl border border-red-100 dark:border-red-900/50 text-justify">{globalLogicData.trapIdentification}</p></div>
+                                                )}
+                                                <div className="pt-2"><h4 className="text-[14px] font-bold text-teal-900 dark:text-teal-300 mb-2 flex items-center"><span className="mr-1.5">💡</span> 全文核心主旨 (Core Meaning)</h4><p className="text-[15px] font-bold text-gray-800 dark:text-gray-200 leading-[1.8] bg-teal-100/50 dark:bg-teal-900/30 p-4 rounded-xl border-l-4 border-teal-500">{globalLogicData.coreMeaning}</p></div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="flex flex-col items-center">
+                                        {!fullMapData ? (
+                                            <button onClick={handleGenerateSummary} disabled={isAnalyzingMap} className={`flex items-center space-x-2 px-8 py-4 rounded-full border transition-all ${isAnalyzingMap ? 'bg-gray-50 dark:bg-gray-800 text-gray-400 border-gray-200 dark:border-gray-700 cursor-wait' : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-gray-900 dark:hover:border-gray-400 hover:shadow-md'}`}>
+                                                {isAnalyzingMap ? <svg className="animate-spin w-5 h-5 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>}
+                                                <span className="text-[15px] font-medium">{isAnalyzingMap ? "正在飞速生成全文逻辑树..." : "提炼全文思维导图"}</span>
+                                            </button>
+                                        ) : (
+                                            <div className="w-full space-y-6 animate-fade-in">
+                                                <div className="flex justify-between items-end border-b border-gray-100 dark:border-gray-800 pb-3">
+                                                    <h3 className="text-[16px] font-bold text-gray-900 dark:text-gray-100 flex items-center"><svg className="w-4 h-4 mr-2 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>结构树 (Mind Map)</h3>
+                                                    <div className="flex gap-2"><div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-md text-[12px] font-medium"><button onClick={() => setMapMode('bilingual')} className={`px-2.5 py-1 rounded-sm transition-colors ${mapMode === 'bilingual' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>双语</button><button onClick={() => setMapMode('en')} className={`px-2.5 py-1 rounded-sm transition-colors ${mapMode === 'en' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>英</button><button onClick={() => setMapMode('zh')} className={`px-2.5 py-1 rounded-sm transition-colors ${mapMode === 'zh' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>中</button></div></div>
+                                                </div>
+                                                <div className="overflow-x-auto w-full py-6 pb-8 custom-scrollbar relative cursor-zoom-in group" onClick={() => { setIsMapModalOpen(true); setMapScale(1); }}>
+                                                    <div className="absolute right-4 top-4 bg-gray-900 dark:bg-black text-white px-3 py-1.5 rounded-full shadow-md text-[12px] font-medium flex items-center z-20 pointer-events-none hover:scale-105 transition-transform"><svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>点我全屏放大</div>
+                                                    <div className="inline-block min-w-max pr-8 bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm"><LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode={mapMode} /></div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </article>
+                            )}
+                        </main>
+
+                        {isMapModalOpen && fullMapData && (
+                            <div className="fixed inset-0 z-[70] bg-[#F3F4F6] dark:bg-gray-900 flex flex-col animate-fade-in">
+                                <div className="h-14 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-3 md:px-6 shadow-sm shrink-0 z-10 sticky top-0">
+                                    <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-900 p-1 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <button onClick={() => setMapScale(s => Math.max(0.1, s - 0.1))} className="w-8 h-8 flex items-center justify-center bg-white dark:bg-gray-800 rounded-md text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-transform shadow-sm">−</button>
+                                        <button onClick={() => setMapScale(1)} className="text-[12px] font-medium w-12 text-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200" title="恢复默认大小">{Math.round(mapScale * 100)}%</button>
+                                        <button onClick={() => setMapScale(s => Math.min(3.0, s + 0.1))} className="w-8 h-8 flex items-center justify-center bg-white dark:bg-gray-800 rounded-md text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-transform shadow-sm">+</button>
+                                    </div>
+                                    <div className="text-[12px] text-gray-400 hidden sm:block font-medium">调整至合适大小后自行截图</div>
+                                    <button onClick={() => setIsMapModalOpen(false)} className="px-4 py-2 bg-gray-900 dark:bg-gray-700 text-white rounded-lg text-[13px] font-medium hover:bg-gray-800 dark:hover:bg-gray-600 active:scale-95 transition-transform shadow-sm">退出全屏</button>
+                                </div>
+                                <div className="flex-1 overflow-auto p-4 md:p-12 custom-scrollbar relative">
+                                     <div className="inline-block transition-transform duration-200 ease-out origin-top-left min-w-max" style={{ transform: `scale(${mapScale})` }}><div className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 inline-block min-w-max"><LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode={mapMode} /></div></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

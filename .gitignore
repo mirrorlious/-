@@ -1,0 +1,15 @@
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Dependency/build folders if the project is later converted
+node_modules/
+dist/
+build/
