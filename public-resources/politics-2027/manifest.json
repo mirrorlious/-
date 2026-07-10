@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "politics-2027",
+  "packId": "politics-2027",
+  "title": "考研政治笔记卡组",
+  "description": "由公开 Obsidian 政治笔记整理的五科考点卡组，保留重点、高频、论述题与易混淆标签。",
+  "subject": "考研政治",
+  "type": "cards",
+  "version": "2026.07.10",
+  "cardCount": 1474,
+  "deckCount": 5,
+  "noteCount": 569,
+  "license": "CC BY-SA 4.0",
+  "author": "XColorful",
+  "maintainer": "Miki 站点",
+  "files": {
+    "bundle": "pack.json.gz.b64",
+    "attribution": "ATTRIBUTION.md"
+  },
+  "subjects": [
+    {
+      "id": "马原",
+      "title": "马克思主义基本原理",
+      "cardCount": 424
+    },
+    {
+      "id": "史纲",
+      "title": "中国近代史纲要",
+      "cardCount": 359
+    },
+    {
+      "id": "毛中特",
+      "title": "毛泽东思想和中国特色社会主义理论体系概论",
+      "cardCount": 142
+    },
+    {
+      "id": "新思想",
+      "title": "习近平新时代中国特色社会主义思想概论",
+      "cardCount": 347
+    },
+    {
+      "id": "思修",
+      "title": "思想道德与法治",
+      "cardCount": 202
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "title": "Miki 站点资料池",
+  "updatedAt": "2026-07-10",
+  "packs": [
+    {
+      "id": "politics-2027",
+      "packId": "politics-2027",
+      "title": "考研政治笔记卡组",
+      "description": "由公开 Obsidian 政治笔记整理的五科考点卡组，保留重点、高频、论述题与易混淆标签。",
+      "subject": "考研政治",
+      "type": "cards",
+      "version": "2026.07.10",
+      "cardCount": 1474,
+      "deckCount": 5,
+      "noteCount": 569,
+      "license": "CC BY-SA 4.0",
+      "author": "XColorful",
+      "manifestUrl": "politics-2027/manifest.json"
+    }
+  ]
+}
