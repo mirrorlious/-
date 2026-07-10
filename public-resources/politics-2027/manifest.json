@@ -6,10 +6,10 @@
   "description": "由公开 Obsidian 政治笔记整理的五科考点卡组，保留重点、高频、论述题与易混淆标签。",
   "subject": "考研政治",
   "type": "cards",
-  "version": "2026.07.10",
-  "cardCount": 1474,
+  "version": "2026.07.10.2",
+  "cardCount": 1513,
   "deckCount": 5,
-  "noteCount": 569,
+  "noteCount": 568,
   "license": "CC BY-SA 4.0",
   "author": "XColorful",
   "maintainer": "Miki 站点",
@@ -21,12 +21,12 @@
     {
       "id": "马原",
       "title": "马克思主义基本原理",
-      "cardCount": 424
+      "cardCount": 464
     },
     {
       "id": "史纲",
       "title": "中国近代史纲要",
-      "cardCount": 359
+      "cardCount": 358
     },
     {
       "id": "毛中特",
