@@ -146,6 +146,6 @@ http://localhost:5173
 
 <div align="center">
 
-**读懂一句话，也看懂一篇文章。**
+
 
 </div>
