@@ -32,8 +32,8 @@
 自动提炼文章主线、关键观点与论证关系，将长文章整理成更容易复盘的结构图。
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/mirrorlious/miki-/main/mindmap-demo.jpg.jpg">
-    <img src="https://raw.githubusercontent.com/mirrorlious/miki-/main/mindmap-demo.jpg.jpg" alt="文章总结与双语思维导图" width="620" />
+  <a href="./mindmap-demo.jpg.jpg">
+    <img src="./mindmap-demo.jpg.jpg" alt="文章总结与双语思维导图" width="620" />
   </a>
 </p>
 
@@ -42,8 +42,8 @@
 通过颜色区分主干、非谓语动词、介词短语和从句，并结合中文释义与写作提示，帮助你真正看懂句子是怎么搭起来的。
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/mirrorlious/miki-/main/sentence-analysis-demo.jpg">
-    <img src="https://raw.githubusercontent.com/mirrorlious/miki-/main/sentence-analysis-demo.jpg" alt="英语长难句结构拆解" width="430" />
+  <a href="./sentence-analysis-demo.jpg">
+    <img src="./sentence-analysis-demo.jpg" alt="英语长难句结构拆解" width="430" />
   </a>
 </p>
 
@@ -52,8 +52,8 @@
 正文中可直接查看重点词汇、句子结构与功能入口，完成精翻、句法分析、外教领读和出题测试。
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/mirrorlious/miki-/main/reader-main-demo.jpg">
-    <img src="https://raw.githubusercontent.com/mirrorlious/miki-/main/reader-main-demo.jpg" alt="外刊正文精读与重点高亮" width="430" />
+  <a href="./reader-main-demo.jpg">
+    <img src="./reader-main-demo.jpg" alt="外刊正文精读与重点高亮" width="430" />
   </a>
 </p>
 
