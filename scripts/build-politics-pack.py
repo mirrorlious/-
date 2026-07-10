@@ -5,11 +5,12 @@ import gzip
 import hashlib
 import json
 import re
+import html
 import shutil
 import sys
 
 PACK_ID = 'politics-2027'
-VERSION = '2026.07.10'
+VERSION = '2026.07.10.2'
 SUBJECTS = {
     '马原': '马克思主义基本原理',
     '史纲': '中国近代史纲要',
@@ -51,8 +52,194 @@ def strip_md(text):
     value = re.sub(r'(?m)^>\s?', '', value)
     value = re.sub(r'(?m)^---\s*$', '', value)
     value = re.sub(r'(?m)^\|\s*:?-+', '', value)
+    value = re.sub(r'(?<!\w)#([\w\u4e00-\u9fff《》-]+)', r'\1', value)
     value = re.sub(r'\n{3,}', '\n\n', value)
     return value.strip()
+
+
+def inline_md(text):
+    value = html.escape(str(text or ''), quote=False)
+    tokens = []
+
+    def protect_code(match):
+        tokens.append(f'<code>{html.escape(match.group(1), quote=False)}</code>')
+        return f'@@MIKI_CODE_{len(tokens) - 1}@@'
+
+    value = re.sub(r'`([^`]+)`', protect_code, value)
+    value = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', value)
+    value = re.sub(r'__([^_]+)__', r'<strong>\1</strong>', value)
+    value = re.sub(r'(?<!\*)\*([^*\n]+)\*(?!\*)', r'<em>\1</em>', value)
+    value = re.sub(
+        r'(?<![\w&])#([\w\u4e00-\u9fff《》-]+)',
+        r'<span class="miki-inline-tag">#\1</span>',
+        value,
+    )
+    for index, token in enumerate(tokens):
+        value = value.replace(f'@@MIKI_CODE_{index}@@', token)
+    return value
+
+
+def split_table_row(line):
+    value = line.strip().strip('|')
+    return [cell.strip() for cell in re.split(r'(?<!\\)\|', value)]
+
+
+def is_table_separator(line):
+    cells = split_table_row(line)
+    return bool(cells) and all(re.fullmatch(r':?-{3,}:?', cell.replace(' ', '')) for cell in cells)
+
+
+def render_table(lines):
+    headers = split_table_row(lines[0])
+    rows = [split_table_row(line) for line in lines[2:] if line.strip()]
+    width = len(headers)
+    rows = [(row + [''] * width)[:width] for row in rows]
+    head_html = ''.join(f'<th>{inline_md(cell)}</th>' for cell in headers)
+    body_html = ''.join(
+        '<tr>' + ''.join(f'<td>{inline_md(cell)}</td>' for cell in row) + '</tr>'
+        for row in rows
+    )
+    return (
+        '<div class="miki-table-wrap"><table class="miki-note-table">'
+        f'<thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody>'
+        '</table></div>'
+    )
+
+
+def markdown_to_html(text):
+    lines = str(text or '').replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    blocks = []
+    paragraph = []
+    list_items = []
+    list_kind = None
+
+    def flush_paragraph():
+        nonlocal paragraph
+        if paragraph:
+            value = ' '.join(item.strip() for item in paragraph if item.strip())
+            if value:
+                blocks.append(f'<p>{inline_md(value)}</p>')
+        paragraph = []
+
+    def flush_list():
+        nonlocal list_items, list_kind
+        if list_items:
+            tag = 'ol' if list_kind == 'ol' else 'ul'
+            blocks.append(f'<{tag}>' + ''.join(f'<li>{inline_md(item)}</li>' for item in list_items) + f'</{tag}>')
+        list_items = []
+        list_kind = None
+
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+
+        if stripped.startswith('|') and index + 1 < len(lines) and is_table_separator(lines[index + 1]):
+            flush_paragraph(); flush_list()
+            table_lines = [line, lines[index + 1]]
+            index += 2
+            while index < len(lines) and lines[index].strip().startswith('|'):
+                table_lines.append(lines[index])
+                index += 1
+            blocks.append(render_table(table_lines))
+            continue
+
+        heading = re.match(r'^(#{2,6})\s+(.+?)\s*$', line)
+        if heading:
+            flush_paragraph(); flush_list()
+            level = min(4, max(2, len(heading.group(1))))
+            blocks.append(f'<h{level}>{inline_md(heading.group(2))}</h{level}>')
+            index += 1
+            continue
+
+        if re.fullmatch(r'---+', stripped):
+            flush_paragraph(); flush_list()
+            blocks.append('<hr>')
+            index += 1
+            continue
+
+        if stripped.startswith('>'):
+            flush_paragraph(); flush_list()
+            quote_lines = []
+            while index < len(lines) and lines[index].strip().startswith('>'):
+                quote_lines.append(re.sub(r'^\s*>\s?', '', lines[index]))
+                index += 1
+            blocks.append(f'<blockquote>{markdown_to_html(chr(10).join(quote_lines))}</blockquote>')
+            continue
+
+        list_match = re.match(r'^\s*[-*+]\s+(.+)$', line)
+        ordered_match = re.match(r'^\s*\d+[.)、]\s+(.+)$', line)
+        if list_match or ordered_match:
+            flush_paragraph()
+            next_kind = 'ol' if ordered_match else 'ul'
+            if list_kind and list_kind != next_kind:
+                flush_list()
+            list_kind = next_kind
+            list_items.append((ordered_match or list_match).group(1).strip())
+            index += 1
+            continue
+
+        if not stripped:
+            flush_paragraph(); flush_list()
+            index += 1
+            continue
+
+        paragraph.append(line)
+        index += 1
+
+    flush_paragraph(); flush_list()
+    return ''.join(blocks)
+
+
+def extract_headings(body):
+    return [
+        strip_md(match.group(2)).strip()
+        for match in re.finditer(r'(?m)^(#{2,3})\s+(.+?)\s*$', body)
+        if strip_md(match.group(2)).strip()
+    ]
+
+
+def overview_html(body):
+    headings = extract_headings(body)
+    if headings:
+        items = ''.join(f'<li>{inline_md(title)}</li>' for title in headings[:18])
+        return f'<div class="miki-overview"><p class="miki-overview-title">本考点包含</p><ol>{items}</ol></div>'
+    return markdown_to_html(body)
+
+
+def extract_markdown_tables(text):
+    lines = str(text or '').split('\n')
+    tables = []
+    index = 0
+    while index < len(lines):
+        if lines[index].strip().startswith('|') and index + 1 < len(lines) and is_table_separator(lines[index + 1]):
+            table_lines = [lines[index], lines[index + 1]]
+            index += 2
+            while index < len(lines) and lines[index].strip().startswith('|'):
+                table_lines.append(lines[index])
+                index += 1
+            headers = split_table_row(table_lines[0])
+            rows = [split_table_row(line) for line in table_lines[2:] if line.strip()]
+            tables.append((headers, rows))
+            continue
+        index += 1
+    return tables
+
+
+def table_row_answer_html(headers, row):
+    width = len(headers)
+    values = (row + [''] * width)[:width]
+    pairs = []
+    for label, value in zip(headers[1:], values[1:]):
+        if not strip_md(value).strip():
+            continue
+        pairs.append(
+            '<div class="miki-fact-row">'
+            f'<dt>{inline_md(label or "要点")}</dt>'
+            f'<dd>{inline_md(value)}</dd>'
+            '</div>'
+        )
+    return '<dl class="miki-fact-list">' + ''.join(pairs) + '</dl>'
 
 
 def split_sections(body):
@@ -141,37 +328,76 @@ def build(source_root, output_root):
             }
 
             overview_id = f'public-politics-{note_key}-overview'
-            question = f'请概述：{title}'
+            question = f'{title}包含哪些核心内容？'
+            overview_back_html = overview_html(body)
             cards.append({
                 'id': overview_id,
                 'deckId': deck_by_subject[subject],
                 'front': question,
-                'back': plain,
+                'back': strip_md(body),
+                'rawFront': question,
+                'rawBack': overview_back_html,
                 'template': 'qa',
+                'align': 'left',
                 'tags': tags,
                 'sourceKey': f'public:{PACK_ID}:{note_key}:overview',
                 'source': source,
             })
             section_count = 0
+            table_row_count = 0
             for section_index, (section_title, content) in enumerate(split_sections(body), start=1):
                 section_plain = strip_md(content)
                 if not section_plain or len(section_plain) > 6500:
                     continue
                 section_clean = strip_md(section_title)
+                section_html = markdown_to_html(content)
                 card_id = f'public-politics-{note_key}-s{section_index:02d}'
+                section_front = f'{title}：{section_clean}'
                 cards.append({
                     'id': card_id,
                     'deckId': deck_by_subject[subject],
-                    'front': f'{title}：{section_clean}',
+                    'front': section_front,
                     'back': section_plain,
+                    'rawFront': section_front,
+                    'rawBack': section_html,
                     'template': 'qa',
+                    'align': 'left',
                     'tags': list(dict.fromkeys([*tags, '分项']))[:24],
                     'sourceKey': f'public:{PACK_ID}:{note_key}:section:{section_index}',
                     'source': source,
                 })
                 section_count += 1
+
+                for table_index, (headers, rows) in enumerate(extract_markdown_tables(content), start=1):
+                    if len(headers) < 2:
+                        continue
+                    for row_index, row in enumerate(rows, start=1):
+                        first_cell = strip_md(row[0] if row else '').strip()
+                        if not first_cell:
+                            continue
+                        row_key = stable_hash(f'{section_clean}|{table_index}|{first_cell}|{row_index}')
+                        row_front = f'{first_cell}的核心考点是什么？'
+                        row_plain = '\n'.join(
+                            f'{header or "要点"}：{strip_md(value)}'
+                            for header, value in zip(headers[1:], (row + [''] * len(headers))[1:])
+                            if strip_md(value).strip()
+                        )
+                        cards.append({
+                            'id': f'public-politics-{note_key}-t{row_key}',
+                            'deckId': deck_by_subject[subject],
+                            'front': row_front,
+                            'back': row_plain,
+                            'rawFront': row_front,
+                            'rawBack': table_row_answer_html(headers, row),
+                            'template': 'qa',
+                            'align': 'left',
+                            'tags': list(dict.fromkeys([*tags, '表格拆分']))[:24],
+                            'sourceKey': f'public:{PACK_ID}:{note_key}:table:{row_key}',
+                            'source': source,
+                        })
+                        table_row_count += 1
             note_count += 1
-            subject_counts[subject] += 1 + section_count
+            subject_counts[subject] += 1 + section_count + table_row_count
 
     bundle = {'data': {'decks': decks}, 'cards': cards}
     raw_bundle = json.dumps(bundle, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
