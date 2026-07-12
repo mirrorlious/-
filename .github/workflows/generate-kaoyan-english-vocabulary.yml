@@ -3,7 +3,7 @@ name: Generate postgraduate vocabulary resources
 on:
   push:
     branches:
-      - codex/kaoyan-vocabulary-public-pool
+      - codex/vocabulary-pool-install
     paths:
       - scripts/generate_kaoyan_english_vocabulary.py
       - .github/workflows/generate-kaoyan-english-vocabulary.yml
