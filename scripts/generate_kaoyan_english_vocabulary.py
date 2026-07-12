@@ -169,21 +169,8 @@ def main() -> None:
             raise ValueError(f'{meta["name"]} 数量异常：{len(words)}')
 
         (OUTPUT_DIR / meta["filename"]).write_text(make_tsx(meta, words), encoding="utf-8", newline="\n")
-        payload = {
-            "schemaVersion": 1,
-            "id": meta["id"],
-            "name": meta["name"],
-            "description": meta["description"],
-            "usageHint": "下载后请在首页 → 词汇默写中导入查看。",
-            "source": {
-                "title": "2027考研英语红宝书结构化词表",
-                "maintainer": "qy自制 / Miki",
-                "notice": "仅供个人学习与词汇默写使用。",
-            },
-            "words": words,
-        }
         (OUTPUT_DIR / meta["json_filename"]).write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            json.dumps(words, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
             newline="\n",
         )
