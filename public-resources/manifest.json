@@ -19,6 +19,38 @@
       "manifestUrl": "politics-2027/manifest.json"
     },
     {
+      "id": "kaoyan-english-one-papers",
+      "packId": "kaoyan-english-one-papers",
+      "title": "考研英语一历年真题（PDF）",
+      "description": "收录 1998–2026 年英语一考场版真题，支持在浏览页与 PDF 学习页按年份预览。",
+      "subject": "考研英语",
+      "type": "pdf-library",
+      "version": "2026.07.12",
+      "cardCount": 1,
+      "deckCount": 1,
+      "documentCount": 29,
+      "license": "转载请注明出处",
+      "author": "Fantasia1999",
+      "usageHint": "加入后可在浏览页选择年份，并进入 PDF 学习页查看。",
+      "manifestUrl": "kaoyan-english-one-papers/manifest.json"
+    },
+    {
+      "id": "kaoyan-english-two-papers",
+      "packId": "kaoyan-english-two-papers",
+      "title": "考研英语二历年真题（PDF）",
+      "description": "收录 2010–2026 年英语二考场版真题，支持在浏览页与 PDF 学习页按年份预览。",
+      "subject": "考研英语",
+      "type": "pdf-library",
+      "version": "2026.07.12",
+      "cardCount": 1,
+      "deckCount": 1,
+      "documentCount": 17,
+      "license": "转载请注明出处",
+      "author": "Fantasia1999",
+      "usageHint": "加入后可在浏览页选择年份，并进入 PDF 学习页查看。",
+      "manifestUrl": "kaoyan-english-two-papers/manifest.json"
+    },
+    {
       "id": "kaoyan-english-2027-basic-qy",
       "packId": "kaoyan-english-2027-basic-qy",
       "title": "考研英语红宝书词汇27新版【基础词】qy自制",
