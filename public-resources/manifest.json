@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "title": "Miki 站点资料池",
-  "updatedAt": "2026-07-10",
+  "updatedAt": "2026-07-12",
   "packs": [
     {
       "id": "politics-2027",
@@ -17,6 +17,51 @@
       "license": "CC BY-SA 4.0",
       "author": "XColorful",
       "manifestUrl": "politics-2027/manifest.json"
+    },
+    {
+      "id": "kaoyan-english-2027-basic-qy",
+      "packId": "kaoyan-english-2027-basic-qy",
+      "title": "考研英语词汇27【基础词】qy自制",
+      "description": "收录基础词与简单基础词，保留原词表 Unit 分类。",
+      "subject": "考研英语",
+      "type": "vocabulary",
+      "version": "2026.07.12",
+      "wordCount": 3680,
+      "license": "仅供个人学习",
+      "author": "qy自制",
+      "usageHint": "下载后请在首页 → 词汇默写中导入查看。",
+      "dataUrl": "kaoyan-english-2027-vocabulary/考研英语词汇27【基础词】qy自制.json",
+      "sourceUrl": "kaoyan-english-2027-vocabulary/考研英语词汇27【基础词】qy自制.tsx"
+    },
+    {
+      "id": "kaoyan-english-2027-essential-qy",
+      "packId": "kaoyan-english-2027-essential-qy",
+      "title": "考研英语词汇27【必考词】qy自制",
+      "description": "收录 2027 考研英语必考词，保留原词表 Unit 分类。",
+      "subject": "考研英语",
+      "type": "vocabulary",
+      "version": "2026.07.12",
+      "wordCount": 1856,
+      "license": "仅供个人学习",
+      "author": "qy自制",
+      "usageHint": "下载后请在首页 → 词汇默写中导入查看。",
+      "dataUrl": "kaoyan-english-2027-vocabulary/考研英语词汇27【必考词】qy自制.json",
+      "sourceUrl": "kaoyan-english-2027-vocabulary/考研英语词汇27【必考词】qy自制.tsx"
+    },
+    {
+      "id": "kaoyan-english-2027-extended-qy",
+      "packId": "kaoyan-english-2027-extended-qy",
+      "title": "考研英语词汇27【超纲词】qy自制",
+      "description": "收录 2027 考研英语超纲词汇。",
+      "subject": "考研英语",
+      "type": "vocabulary",
+      "version": "2026.07.12",
+      "wordCount": 1015,
+      "license": "仅供个人学习",
+      "author": "qy自制",
+      "usageHint": "下载后请在首页 → 词汇默写中导入查看。",
+      "dataUrl": "kaoyan-english-2027-vocabulary/考研英语词汇27【超纲词】qy自制.json",
+      "sourceUrl": "kaoyan-english-2027-vocabulary/考研英语词汇27【超纲词】qy自制.tsx"
     }
   ]
 }
