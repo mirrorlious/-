@@ -15,29 +15,29 @@ OUTPUT_DIR = Path("public-resources/kaoyan-english-2027-vocabulary")
 DECKS = {
     "basic": {
         "id": "kaoyan-english-2027-basic-qy",
-        "name": "考研英语词汇27【基础词】qy自制",
-        "filename": "考研英语词汇27【基础词】qy自制.tsx",
-        "json_filename": "考研英语词汇27【基础词】qy自制.json",
+        "name": "考研英语红宝书词汇27新版【基础词】qy自制",
+        "filename": "考研英语红宝书词汇27新版【基础词】qy自制.tsx",
+        "json_filename": "考研英语红宝书词汇27新版【基础词】qy自制.json",
         "const": "KAOYAN_ENGLISH_2027_BASIC_QY",
-        "description": "2027考研英语基础词与简单基础词，按原词表 Unit 保留分类。",
+        "description": "2027考研英语红宝书基础词与简单基础词，按原词表 Unit 保留分类。",
         "expected_count": 3680,
     },
     "essential": {
         "id": "kaoyan-english-2027-essential-qy",
-        "name": "考研英语词汇27【必考词】qy自制",
-        "filename": "考研英语词汇27【必考词】qy自制.tsx",
-        "json_filename": "考研英语词汇27【必考词】qy自制.json",
+        "name": "考研英语红宝书词汇27新版【必考词】qy自制",
+        "filename": "考研英语红宝书词汇27新版【必考词】qy自制.tsx",
+        "json_filename": "考研英语红宝书词汇27新版【必考词】qy自制.json",
         "const": "KAOYAN_ENGLISH_2027_ESSENTIAL_QY",
-        "description": "2027考研英语必考词，按原词表 Unit 保留分类。",
+        "description": "2027考研英语红宝书必考词，按原词表 Unit 保留分类。",
         "expected_count": 1856,
     },
     "extended": {
         "id": "kaoyan-english-2027-extended-qy",
-        "name": "考研英语词汇27【超纲词】qy自制",
-        "filename": "考研英语词汇27【超纲词】qy自制.tsx",
-        "json_filename": "考研英语词汇27【超纲词】qy自制.json",
+        "name": "考研英语红宝书词汇27新版【超纲词】qy自制",
+        "filename": "考研英语红宝书词汇27新版【超纲词】qy自制.tsx",
+        "json_filename": "考研英语红宝书词汇27新版【超纲词】qy自制.json",
         "const": "KAOYAN_ENGLISH_2027_EXTENDED_QY",
-        "description": "2027考研英语超纲词汇。",
+        "description": "2027考研英语红宝书超纲词汇。",
         "expected_count": 1015,
     },
 }
@@ -130,7 +130,7 @@ def make_tsx(meta: dict, words: list[dict]) -> str:
     return f'''/**
  * {meta["name"]}
  *
- * 数据来源：用户提供的 2027 考研英语词汇结构化数据。
+ * 数据来源：用户提供的 2027 考研英语红宝书词汇结构化数据。
  * 整理方式：按原文件的基础词 / 必考词 / 超纲词分类；释义做 Unicode 与空白规范化。
  * 使用入口：Miki 首页 → 词汇默写（/vocabulary-spelling）。
  * 说明：仅少量词提供本地助记，其余词可使用页面在线 AI 解析。
