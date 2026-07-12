@@ -1,0 +1,44 @@
+name: Generate postgraduate vocabulary resources
+
+on:
+  push:
+    branches:
+      - codex/kaoyan-vocabulary-public-pool
+    paths:
+      - scripts/generate_kaoyan_english_vocabulary.py
+      - .github/workflows/generate-kaoyan-english-vocabulary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate TSX and JSON resources
+        run: python scripts/generate_kaoyan_english_vocabulary.py
+
+      - name: Commit generated resources
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public-resources/kaoyan-english-2027-vocabulary/*.tsx
+          git add public-resources/kaoyan-english-2027-vocabulary/*.json
+          if git diff --cached --quiet; then
+            echo "Generated resources are already current."
+            exit 0
+          fi
+          git commit -m "data: generate postgraduate vocabulary packs"
+          git push
