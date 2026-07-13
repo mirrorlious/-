@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "pharmacology-mindmap-cards",
+  "packId": "pharmacology-mindmap-cards",
+  "title": "药理学思维导图与药物卡片",
+  "description": "包含药理学思维导图纲要与药物问答卡片，支持在浏览页查看并进入普通卡片学习。",
+  "subject": "医学",
+  "type": "cards",
+  "version": "2026.07.13",
+  "cardCount": 251,
+  "deckCount": 8,
+  "noteCount": 251,
+  "outlineCardCount": 49,
+  "drugCardCount": 202,
+  "license": "原资料未声明许可，仅供个人学习",
+  "author": "原资料作者（未署名）",
+  "maintainer": "Miki 站点",
+  "files": {
+    "attribution": "ATTRIBUTION.md",
+    "bundleParts": [
+      "pack.part-001.b64",
+      "pack.part-002.b64",
+      "pack.part-003.b64",
+      "pack.part-004.b64",
+      "pack.part-005.b64",
+      "pack.part-006.b64",
+      "pack.part-007.b64",
+      "pack.part-008.b64"
+    ]
+  },
+  "decks": [
+    {
+      "id": "public-pharmacology-deck-5f021fce30575b",
+      "title": "总论与重点",
+      "cardCount": 6
+    },
+    {
+      "id": "public-pharmacology-deck-459450f2978134",
+      "title": "传出神经系统",
+      "cardCount": 11
+    },
+    {
+      "id": "public-pharmacology-deck-deae2ccbd174d4",
+      "title": "中枢神经系统",
+      "cardCount": 7
+    },
+    {
+      "id": "public-pharmacology-deck-bc51eff46332c6",
+      "title": "自体活性物质",
+      "cardCount": 2
+    },
+    {
+      "id": "public-pharmacology-deck-d110a114990380",
+      "title": "心血管系统",
+      "cardCount": 9
+    },
+    {
+      "id": "public-pharmacology-deck-c00dc8a78e7386",
+      "title": "内分泌、呼吸与消化",
+      "cardCount": 6
+    },
+    {
+      "id": "public-pharmacology-deck-782a3d15d06d62",
+      "title": "抗菌药",
+      "cardCount": 8
+    },
+    {
+      "id": "public-pharmacology-deck-4779af8842346e",
+      "title": "药物卡片",
+      "cardCount": 202
+    }
+  ]
+}
