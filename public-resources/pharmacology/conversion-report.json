@@ -1,0 +1,36 @@
+{
+  "xmind": {
+    "sheetCount": 59,
+    "convertedSheetCount": 55,
+    "skippedSheets": [
+      {
+        "index": 1,
+        "title": "胆碱受体阻断药",
+        "reason": "missing-topic"
+      },
+      {
+        "index": 5,
+        "title": "胆碱酯酶药物",
+        "reason": "missing-topic"
+      },
+      {
+        "index": 11,
+        "title": "抗心律失常药",
+        "reason": "missing-topic"
+      },
+      {
+        "index": 21,
+        "title": "抗心绞痛药",
+        "reason": "missing-topic"
+      }
+    ],
+    "mediaCount": 23
+  },
+  "anki": {
+    "rawRowCount": 202,
+    "convertedCardCount": 202,
+    "duplicateCount": 0
+  },
+  "cardCount": 257,
+  "deckCount": 8
+}

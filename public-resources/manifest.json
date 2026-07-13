@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "title": "Miki 站点资料池",
-  "updatedAt": "2026-07-12",
+  "updatedAt": "2026-07-13",
   "packs": [
     {
       "id": "politics-2027",
@@ -17,6 +17,22 @@
       "license": "CC BY-SA 4.0",
       "author": "XColorful",
       "manifestUrl": "politics-2027/manifest.json"
+    },
+    {
+      "id": "pharmacology-xmind-anki",
+      "packId": "pharmacology-xmind-anki",
+      "title": "药理学思维导图与药物卡片",
+      "description": "由 XMind 药理学纲要与 Anki 药物卡片转换，支持在浏览页与学习页按章节使用。",
+      "subject": "药理学",
+      "type": "cards",
+      "version": "2026.07.13.1",
+      "cardCount": 257,
+      "deckCount": 8,
+      "xmindSheetCount": 55,
+      "ankiCardCount": 202,
+      "license": "按原项目许可（已确认允许再分发）",
+      "author": "nanguaguag",
+      "manifestUrl": "pharmacology/manifest.json"
     },
     {
       "id": "kaoyan-english-one-papers",
