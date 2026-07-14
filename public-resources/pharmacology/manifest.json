@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "id": "pharmacology-xmind-anki",
+  "packId": "pharmacology-xmind-anki",
+  "title": "药理学思维导图与药物卡片",
+  "description": "由药理学 XMind 思维导图与 Anki 药物卡片转换，支持在 Browse 与 Study 中按章节阅读和复习。",
+  "subject": "药理学",
+  "type": "cards",
+  "version": "2026.07.13.1",
+  "cardCount": 257,
+  "deckCount": 8,
+  "license": "按原项目许可（已确认允许再分发）",
+  "author": "nanguaguag",
+  "maintainer": "Miki 站点",
+  "sourceUrl": "https://github.com/nanguaguag/pharmacology",
+  "files": {
+    "bundleParts": [
+      "pack.part-000.b64",
+      "pack.part-001.b64",
+      "pack.part-002.b64",
+      "pack.part-003.b64"
+    ],
+    "attribution": "ATTRIBUTION.md"
+  },
+  "decks": [
+    {
+      "id": "public-pharmacology-xmind-anki-deck-5f021fce30575b",
+      "title": "总论与重点",
+      "cardCount": 6
+    },
+    {
+      "id": "public-pharmacology-xmind-anki-deck-459450f2978134",
+      "title": "传出神经系统",
+      "cardCount": 11
+    },
+    {
+      "id": "public-pharmacology-xmind-anki-deck-deae2ccbd174d4",
+      "title": "中枢神经系统",
+      "cardCount": 11
+    },
+    {
+      "id": "public-pharmacology-xmind-anki-deck-e69d0e36ba0b4b",
+      "title": "自体活性物质与抗炎药",
+      "cardCount": 2
+    },
+    {
+      "id": "public-pharmacology-xmind-anki-deck-d110a114990380",
+      "title": "心血管系统",
+      "cardCount": 10
+    },
+    {
+      "id": "public-pharmacology-xmind-anki-deck-c00dc8a78e7386",
+      "title": "内分泌、呼吸与消化",
+      "cardCount": 6
+    },
+    {
+      "id": "public-pharmacology-xmind-anki-deck-782a3d15d06d62",
+      "title": "抗菌药",
+      "cardCount": 9
+    },
+    {
+      "id": "public-pharmacology-xmind-anki-deck-4779af8842346e",
+      "title": "药物卡片",
+      "cardCount": 202
+    }
+  ],
+  "conversion": {
+    "xmind": {
+      "sheetCount": 59,
+      "convertedSheetCount": 55,
+      "skippedSheets": [
+        {
+          "index": 1,
+          "title": "胆碱受体阻断药",
+          "reason": "missing-topic"
+        },
+        {
+          "index": 5,
+          "title": "胆碱酯酶药物",
+          "reason": "missing-topic"
+        },
+        {
+          "index": 11,
+          "title": "抗心律失常药",
+          "reason": "missing-topic"
+        },
+        {
+          "index": 21,
+          "title": "抗心绞痛药",
+          "reason": "missing-topic"
+        }
+      ],
+      "mediaCount": 23
+    },
+    "anki": {
+      "rawRowCount": 202,
+      "convertedCardCount": 202,
+      "duplicateCount": 0
+    },
+    "cardCount": 257,
+    "deckCount": 8
+  }
+}
