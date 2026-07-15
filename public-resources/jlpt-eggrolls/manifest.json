@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "id": "jlpt-eggrolls-v35",
+  "packId": "jlpt-eggrolls-v35",
+  "title": "【egg rolls】JLPT N1-N5 一万词 v3.5",
+  "description": "收录 JLPT N1-N5 共 10,634 个词条，含假名、音调、词性、简体中文释义、例句与按需音频。",
+  "subject": "日语",
+  "type": "cards",
+  "version": "2026.07.13",
+  "cardCount": 10634,
+  "deckCount": 11,
+  "noteCount": 10634,
+  "audioReferenceCount": 28786,
+  "uniqueAudioCount": 27015,
+  "license": "CC BY-NC 4.0",
+  "author": "5mdld",
+  "maintainer": "Miki 站点",
+  "sourceUrl": "https://github.com/5mdld/anki-jlpt-decks",
+  "sourceCommit": "2fe3632726ff63c429dbb602cf181c711247db53",
+  "files": {
+    "bundleParts": [
+      "pack.part-000.b64",
+      "pack.part-001.b64",
+      "pack.part-002.b64",
+      "pack.part-003.b64",
+      "pack.part-004.b64",
+      "pack.part-005.b64"
+    ],
+    "attribution": "ATTRIBUTION.md"
+  },
+  "decks": [
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-d7193f84fe2690",
+      "title": "N5 词汇",
+      "cardCount": 807
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-f3f5ab232d2760",
+      "title": "N4 词汇",
+      "cardCount": 757
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-affe0f44eac782",
+      "title": "N3 高频",
+      "cardCount": 380
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-565c6ce01c57cd",
+      "title": "N3 中频",
+      "cardCount": 706
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-b1bb504c27cf18",
+      "title": "N3 低频",
+      "cardCount": 732
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-0de8b006bc6d1f",
+      "title": "N2 高频",
+      "cardCount": 849
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-71be7255635bfb",
+      "title": "N2 中频",
+      "cardCount": 1300
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-912d71ed776fb0",
+      "title": "N2 低频",
+      "cardCount": 1059
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-032bc14f7d37da",
+      "title": "N1 高频",
+      "cardCount": 598
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-8a3f55821b9c60",
+      "title": "N1 中频",
+      "cardCount": 1302
+    },
+    {
+      "id": "public-jlpt-eggrolls-v35-deck-4c683bd2ae233e",
+      "title": "N1 低频",
+      "cardCount": 2144
+    }
+  ]
+}

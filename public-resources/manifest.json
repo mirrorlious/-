@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "title": "Miki 站点资料池",
-  "updatedAt": "2026-07-13",
+  "updatedAt": "2026-07-15",
   "packs": [
     {
       "id": "dyl-exam-public-backup",
@@ -48,6 +48,23 @@
       "license": "按原项目许可（已确认允许再分发）",
       "author": "nanguaguag",
       "manifestUrl": "pharmacology/manifest.json"
+    },
+    {
+      "id": "jlpt-eggrolls-v35",
+      "packId": "jlpt-eggrolls-v35",
+      "title": "【egg rolls】JLPT N1-N5 一万词 v3.5",
+      "description": "收录 JLPT N1-N5 共 10,634 个词条，含假名、音调、词性、中文释义、例句与按需音频。",
+      "subject": "日语",
+      "type": "cards",
+      "version": "2026.07.13",
+      "cardCount": 10634,
+      "deckCount": 11,
+      "audioReferenceCount": 28786,
+      "uniqueAudioCount": 27015,
+      "license": "CC BY-NC 4.0",
+      "author": "5mdld",
+      "usageHint": "加入后可在浏览页按 JLPT 等级与频率查看，并在学习页复习。",
+      "manifestUrl": "jlpt-eggrolls/manifest.json"
     },
     {
       "id": "kaoyan-english-one-papers",

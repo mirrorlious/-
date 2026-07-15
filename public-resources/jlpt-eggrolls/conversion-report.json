@@ -1,0 +1,39 @@
+{
+  "source": {
+    "repository": "https://github.com/5mdld/anki-jlpt-decks",
+    "commit": "2fe3632726ff63c429dbb602cf181c711247db53",
+    "notesBlobSha": "27d43d8379248d652d3a7f16c01ffd3cd9be2e0e"
+  },
+  "input": {
+    "noteCount": 10634,
+    "columnCount": 39,
+    "audioReferenceCount": 28786,
+    "uniqueAudioCount": 27015
+  },
+  "output": {
+    "cardCount": 10634,
+    "deckCount": 11,
+    "bundlePartCount": 6,
+    "rawBytes": 41817435,
+    "gzipBytes": 2819060,
+    "base64Chars": 3758748
+  },
+  "deckCounts": {
+    "eggrolls-JLPT10k-v3.5::3-N3::3-低频": 732,
+    "eggrolls-JLPT10k-v3.5::1-N5": 807,
+    "eggrolls-JLPT10k-v3.5::4-N2::2-中频": 1300,
+    "eggrolls-JLPT10k-v3.5::2-N4": 757,
+    "eggrolls-JLPT10k-v3.5::4-N2::3-低频": 1059,
+    "eggrolls-JLPT10k-v3.5::5-N1::2-中频": 1302,
+    "eggrolls-JLPT10k-v3.5::5-N1::3-低频": 2144,
+    "eggrolls-JLPT10k-v3.5::3-N3::2-中频": 706,
+    "eggrolls-JLPT10k-v3.5::3-N3::1-高频": 380,
+    "eggrolls-JLPT10k-v3.5::4-N2::1-高频": 849,
+    "eggrolls-JLPT10k-v3.5::5-N1::1-高频": 598
+  },
+  "validation": {
+    "uniqueCardIds": true,
+    "nonEmptySides": true,
+    "validDeckIds": true
+  }
+}
