@@ -4,6 +4,21 @@
   "updatedAt": "2026-07-13",
   "packs": [
     {
+      "id": "dyl-exam-public-backup",
+      "packId": "dyl-exam-public-backup",
+      "title": "【DYL】考试分析（备用源）",
+      "description": "当内置考试分析资源不可用时，可从公共资源备用源加入。",
+      "subject": "法硕",
+      "type": "cards",
+      "version": "2026.07.15",
+      "cardCount": 870,
+      "deckCount": 9,
+      "license": "仅供个人学习",
+      "author": "DYL",
+      "installGate": "password",
+      "manifestUrl": "dyl-exam-public-backup/manifest.json"
+    },
+    {
       "id": "politics-2027",
       "packId": "politics-2027",
       "title": "考研政治笔记卡组",
