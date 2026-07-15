@@ -16,7 +16,7 @@
       "license": "仅供个人学习",
       "author": "DYL",
       "installGate": "password",
-      "manifestUrl": "dyl-exam-public-backup/manifest.json"
+      "manifestUrl": "https://cdn.jsdelivr.net/gh/mirrorlious/-@main/public-resources/dyl-exam-public-backup/manifest.json"
     },
     {
       "id": "politics-2027",
