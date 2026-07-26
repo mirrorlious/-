@@ -860,6 +860,22 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const isPanelOpen = showTranslation || showAnalysis || showQuiz || !!activeNote || isTransLoading || isLocalTransLoading || isAnalysisLoading || isAudioLoading || isQuizLoading || !!audioUrl;
             const showActions = isInteracting || isPanelOpen;
 
+            useEffect(() => {
+                if (!showActions) return undefined;
+                const closeMenu = (event) => {
+                    if (!event.target.closest('[data-reader-paragraph]')) setIsInteracting(false);
+                };
+                const handleKeyDown = (event) => {
+                    if (event.key === 'Escape') setIsInteracting(false);
+                };
+                document.addEventListener('pointerdown', closeMenu);
+                document.addEventListener('keydown', handleKeyDown);
+                return () => {
+                    document.removeEventListener('pointerdown', closeMenu);
+                    document.removeEventListener('keydown', handleKeyDown);
+                };
+            }, [showActions]);
+
             const handleParagraphClick = (e) => {
                 if (window.getSelection() && window.getSelection().toString().length > 0) return;
                 if (!isPanelOpen) setIsInteracting(prev => !prev);
@@ -1075,6 +1091,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
             return (
                 <div 
+                    data-reader-paragraph="true"
                     className="mb-14 relative group"
                     onMouseEnter={() => setIsInteracting(true)}
                     onMouseLeave={() => setIsInteracting(false)}
@@ -1090,6 +1107,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     {!showActions && (
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsInteracting(true); }}
+                            aria-expanded={showActions}
                             className="mt-2 inline-flex items-center gap-1.5 min-h-[36px] px-2 text-[12px] font-medium text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors md:opacity-0 md:group-hover:opacity-100 focus:opacity-100"
                             aria-label="展开本段阅读工具"
                         >
@@ -1120,7 +1138,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         </div>
                     )}
 
-                    <div className={`flex flex-wrap items-center gap-2 transition-all duration-300 ease-in-out overflow-hidden origin-top ${showActions ? 'max-h-[150px] opacity-100 mt-4 scale-y-100' : 'max-h-0 opacity-0 mt-0 scale-y-95 pointer-events-none'}`}>
+                    <div role="menu" aria-label="Paragraph actions" className={`flex flex-wrap items-center gap-2 transition-all duration-300 ease-in-out overflow-hidden origin-top ${showActions ? 'max-h-[150px] opacity-100 mt-4 scale-y-100' : 'max-h-0 opacity-0 mt-0 scale-y-95 pointer-events-none'}`}>
                         <button 
                             onClick={handleToggleTrans} 
                             disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow} 

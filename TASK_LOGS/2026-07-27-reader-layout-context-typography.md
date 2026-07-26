@@ -97,3 +97,11 @@ GitHub：未上传，等待用户本地验收。
 - Browser fullscreen uses `requestFullscreen`, `exitFullscreen`, and `fullscreenchange`; unsupported or failed calls fall back to immersive mode.
 - Validation: browser interaction confirmed immersive mode hides the header and the exit action restores it.
 - Next: implement paragraph-level lightweight entry and action menu in stage 5.
+
+## 11. Stage 5: Paragraph lightweight entry and unified menu
+
+- Status: completed locally.
+- Existing paragraph actions are now explicitly marked as one accessible `Paragraph actions` menu, opened by a compact paragraph trigger and closed by outside pointer interaction or Escape.
+- The menu remains local to each paragraph and preserves existing translation, analysis, speech, cloud TTS, and quiz handlers without duplicating requests.
+- Validation: browser opened the menu and outside interaction restored its collapsed class; no API request was triggered.
+- Next: add an article-only selection toolbar in stage 6.
