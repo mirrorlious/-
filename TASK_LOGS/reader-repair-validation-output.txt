@@ -1,0 +1,38 @@
+static_code=0
+npm_code=0
+babel_code=0
+---- static ----
+Static markers and script extraction passed
+---- npm ----
+{
+  "name": "-",
+  "version": "1.0.0",
+  "description": "一个面向外刊精读和考研英语阅读训练的单页应用。项目从粘贴源码复刻整理而来，保留原有 React + Tailwind CDN 形态，无需构建即可部署到 GitHub Pages。",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mirrorlious/-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/mirrorlious/-/issues"
+  },
+  "homepage": "https://github.com/mirrorlious/-#readme"
+}
+
+
+
+
+added 47 packages, and audited 48 packages in 2s
+
+6 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+---- babel ----
+Babel JSX parse passed
