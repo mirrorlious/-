@@ -2095,7 +2095,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                         </div>
                                                         <button onClick={expandAllMapNodes} className="h-9 px-3 rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] text-gray-600 dark:text-gray-300 hover:border-gray-500">展开全部</button>
                                                         <button onClick={collapseAllMapNodes} className="h-9 px-3 rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] text-gray-600 dark:text-gray-300 hover:border-gray-500">收起全部</button>
-                                                        <button onClick={() => { setIsMapModalOpen(true); setMapScale(1); }} className="h-9 px-3 rounded-sm bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-[12px] font-medium hover:bg-gray-800 dark:hover:bg-white">全屏查看</button>
+                                                        <button onClick={() => { setIsMapModalOpen(true); setMapScale(1); }} className="h-9 px-3 rounded-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[12px] font-medium hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">全屏查看</button>
                                                     </div>
                                                 </div>
                                                 <div className="w-full bg-gray-50/70 dark:bg-gray-950/30 p-2 sm:p-3 border border-gray-200 dark:border-gray-700">
@@ -2119,7 +2119,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                     <button onClick={expandAllMapNodes} className="h-9 px-3 rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] text-gray-600 dark:text-gray-300 hover:border-gray-500">展开全部</button>
                                     <button onClick={collapseAllMapNodes} className="h-9 px-3 rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] text-gray-600 dark:text-gray-300 hover:border-gray-500">收起全部</button>
                                     <div className="ml-auto text-[12px] text-gray-400 hidden md:block">点击分支箭头单独展开或收起</div>
-                                    <button onClick={() => setIsMapModalOpen(false)} className="px-4 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-sm text-[13px] font-medium hover:bg-gray-800 dark:hover:bg-white active:scale-95 transition-transform">退出全屏</button>
+                                    <button onClick={() => setIsMapModalOpen(false)} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-sm text-[13px] font-medium hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-transform">退出全屏</button>
                                 </div>
                                 <div className="flex-1 overflow-auto p-3 md:p-8 custom-scrollbar">
                                     <div className="max-w-5xl mx-auto transition-transform duration-200 ease-out origin-top" style={{ transform: `scale(${mapScale})` }}>
