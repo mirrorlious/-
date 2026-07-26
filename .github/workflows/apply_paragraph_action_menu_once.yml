@@ -1,0 +1,81 @@
+name: Apply paragraph action menu once
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+
+      - name: Apply scoped paragraph interaction migration
+        shell: bash
+        run: python scripts/one_shot_paragraph_action_menu.py
+
+      - name: Validate source
+        shell: bash
+        run: |
+          git diff --check
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              'data-reader-paragraph-trigger="true"',
+              'data-reader-paragraph-menu="true"',
+              '本段较短，翻译、朗读和复制仍可使用',
+              'const handleCopyParagraph = async',
+              'md:group-hover:opacity-100'
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit(f'Missing paragraph menu markers: {missing}')
+          forbidden = [
+              'aria-label="Paragraph actions"',
+              'onMouseEnter={() => setIsInteracting(true)}',
+              'onMouseLeave={() => setIsInteracting(false)}',
+              'handleParagraphClick',
+              'const showActions ='
+          ]
+          remaining = [marker for marker in forbidden if marker in text]
+          if remaining:
+              raise SystemExit(f'Legacy markers remain: {remaining}')
+          if text.count('<script') != text.count('</script>'):
+              raise SystemExit('Script tag count mismatch')
+          marker = '<script type="text/babel" data-type="module">'
+          start = text.index(marker) + len(marker)
+          end = text.index('</script>', start)
+          Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
+          print('Static paragraph menu validation passed')
+          PY
+          npm init -y >/dev/null 2>&1
+          npm install --no-save @babel/core @babel/preset-react >/dev/null 2>&1
+          node - <<'NODE'
+          const fs = require('fs');
+          const babel = require('@babel/core');
+          const source = fs.readFileSync('/tmp/reader.jsx', 'utf8');
+          babel.transformSync(source, {
+            filename: 'index.jsx',
+            sourceType: 'module',
+            presets: [['@babel/preset-react', { runtime: 'classic' }]]
+          });
+          console.log('Babel JSX parse passed');
+          NODE
+
+      - name: Commit migration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: replace paragraph hover buttons with action menu"
+          git push origin HEAD:feat/reader-annotations-v2
