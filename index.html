@@ -1645,11 +1645,11 @@ ${JSON.stringify(miniCorpus, null, 2)}
                             <div className="p-1.5">
                                 <button role="menuitem" onClick={runParagraphAction(handleToggleTrans)} disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
                                     <span>{showTranslation ? '收起段落翻译' : '翻译本段'}</span>
-                                    {(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? <span className="text-[10px] text-gray-400">处理中</span> : showTranslation ? <span className="text-sky-600">✓</span> : null}
+                                    {(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? <span className="text-[10px] text-gray-400">处理中</span> : finalTranslationToShow ? <span className="text-[10px] text-sky-600 dark:text-sky-400">已缓存</span> : null}
                                 </button>
                                 <button role="menuitem" onClick={runParagraphAction(handleToggleAnalysis)} disabled={!isConsideredParagraph || isAnalysisLoading} title={!isConsideredParagraph ? '当前段落较短，暂无复杂句式' : ''} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-45 disabled:cursor-not-allowed">
                                     <span>{showAnalysis ? '收起长难句拆解' : '长难句拆解'}</span>
-                                    {isAnalysisLoading ? <span className="text-[10px] text-gray-400">解构中</span> : showAnalysis ? <span className="text-amber-600">✓</span> : !isConsideredParagraph ? <span className="text-[10px] text-gray-400">本段较短</span> : null}
+                                    {isAnalysisLoading ? <span className="text-[10px] text-gray-400">解构中</span> : analysisData ? <span className="text-[10px] text-amber-600 dark:text-amber-400">已缓存</span> : !isConsideredParagraph ? <span className="text-[10px] text-gray-400">本段较短</span> : null}
                                 </button>
                                 <div className="my-1 border-t border-gray-100 dark:border-gray-700"></div>
                                 <button role="menuitem" onClick={runParagraphAction(handleLocalSpeech)} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
@@ -1657,11 +1657,11 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                 </button>
                                 <button role="menuitem" onClick={runParagraphAction(handleToggleAudio)} disabled={isAudioLoading || !!audioUrl} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
                                     <span>{audioUrl ? '外教领读已生成' : '外教领读'}</span>
-                                    {isAudioLoading ? <span className="text-[10px] text-gray-400">请求中</span> : audioUrl ? <span className="text-blue-600">✓</span> : <span className="text-[10px] text-gray-400">调用模型</span>}
+                                    {isAudioLoading ? <span className="text-[10px] text-gray-400">请求中</span> : audioUrl ? <span className="text-[10px] text-blue-600 dark:text-blue-400">已缓存</span> : <span className="text-[10px] text-gray-400">调用模型</span>}
                                 </button>
                                 <button role="menuitem" onClick={runParagraphAction(handleToggleQuiz)} disabled={!isConsideredParagraph || isQuizLoading} title={!isConsideredParagraph ? '当前内容不足以生成有效练习' : ''} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-45 disabled:cursor-not-allowed">
                                     <span>{showQuiz ? '收起段落练习' : '生成练习'}</span>
-                                    {isQuizLoading ? <span className="text-[10px] text-gray-400">生成中</span> : showQuiz ? <span className="text-violet-600">✓</span> : !isConsideredParagraph ? <span className="text-[10px] text-gray-400">内容不足</span> : null}
+                                    {isQuizLoading ? <span className="text-[10px] text-gray-400">生成中</span> : quizData ? <span className="text-[10px] text-violet-600 dark:text-violet-400">已缓存</span> : !isConsideredParagraph ? <span className="text-[10px] text-gray-400">内容不足</span> : null}
                                 </button>
                                 <div className="my-1 border-t border-gray-100 dark:border-gray-700"></div>
                                 <button role="menuitem" onClick={handleCopyParagraph} className="w-full min-h-[40px] px-3 rounded-sm text-left text-[13px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">复制段落</button>
