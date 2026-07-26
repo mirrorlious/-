@@ -19,7 +19,7 @@ jobs:
           ref: feat/reader-annotations-v2
           fetch-depth: 0
 
-      - name: Apply patch and capture output
+      - name: Apply and validate with diagnostics
         shell: bash
         run: |
           python - <<'PY'
@@ -30,26 +30,21 @@ jobs:
           text = text.replace('"kind: \'paragraph-quiz\'"', '"openParagraphResult(\'paragraph-quiz\'"')
           path.write_text(text, encoding='utf-8')
           PY
-          set +e
-          python scripts/one_shot_results_fulltext_tools.py > /tmp/results-tools.log 2>&1
-          code=$?
-          set -e
-          {
-            echo "exit_code=$code"
-            echo "commit=${GITHUB_SHA}"
-            echo "---- output ----"
-            cat /tmp/results-tools.log
-          } > TASK_LOGS/reader-results-tools-run-output.txt
 
-      - name: Validate successful patch
-        shell: bash
-        run: |
-          if ! grep -q '^exit_code=0$' TASK_LOGS/reader-results-tools-run-output.txt; then
-            echo "Patch failed; diagnostics will be committed"
-            exit 0
-          fi
-          git diff --check
-          python - <<'PY'
+          set +e
+          python scripts/one_shot_results_fulltext_tools.py > /tmp/patch.log 2>&1
+          patch_code=$?
+
+          diff_code=99
+          static_code=99
+          npm_code=99
+          babel_code=99
+
+          if [ "$patch_code" -eq 0 ]; then
+            git diff --check > /tmp/diff.log 2>&1
+            diff_code=$?
+
+            python - <<'PY' > /tmp/static.log 2>&1
           from pathlib import Path
           text = Path('index.html').read_text(encoding='utf-8')
           required = [
@@ -73,9 +68,13 @@ jobs:
           Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
           print('Static markers passed')
           PY
-          npm init -y >/dev/null 2>&1
-          npm install --no-save @babel/core @babel/preset-react >/dev/null 2>&1
-          node - <<'NODE'
+            static_code=$?
+
+            npm init -y > /tmp/npm.log 2>&1
+            npm install --no-save @babel/core @babel/preset-react >> /tmp/npm.log 2>&1
+            npm_code=$?
+
+            node - <<'NODE' > /tmp/babel.log 2>&1
           const fs = require('fs');
           const babel = require('@babel/core');
           const source = fs.readFileSync('/tmp/reader.jsx', 'utf8');
@@ -86,6 +85,37 @@ jobs:
           });
           console.log('Babel JSX parse passed');
           NODE
+            babel_code=$?
+          fi
+          set -e
+
+          {
+            echo "patch_code=$patch_code"
+            echo "diff_code=$diff_code"
+            echo "static_code=$static_code"
+            echo "npm_code=$npm_code"
+            echo "babel_code=$babel_code"
+            echo "commit=${GITHUB_SHA}"
+            echo "---- patch ----"
+            cat /tmp/patch.log 2>/dev/null || true
+            echo "---- diff ----"
+            cat /tmp/diff.log 2>/dev/null || true
+            echo "---- static ----"
+            cat /tmp/static.log 2>/dev/null || true
+            echo "---- npm ----"
+            tail -n 25 /tmp/npm.log 2>/dev/null || true
+            echo "---- babel ----"
+            cat /tmp/babel.log 2>/dev/null || true
+          } > /tmp/reader-results-tools-validation.txt
+
+          if [ "$patch_code" -eq 0 ] && [ "$diff_code" -eq 0 ] && [ "$static_code" -eq 0 ] && [ "$npm_code" -eq 0 ] && [ "$babel_code" -eq 0 ]; then
+            rm -f TASK_LOGS/reader-results-tools-run-output.txt TASK_LOGS/reader-results-tools-validation-output.txt
+            echo "success" > /tmp/reader-results-tools-status
+          else
+            git restore --source=HEAD -- index.html TASK_LOGS/2026-07-27-0520-reader-results-and-fulltext-tools.md .github/workflows/apply_reader_results_fulltext_tools.yml scripts/one_shot_results_fulltext_tools.py
+            cp /tmp/reader-results-tools-validation.txt TASK_LOGS/reader-results-tools-validation-output.txt
+            echo "failure" > /tmp/reader-results-tools-status
+          fi
 
       - name: Commit feature or diagnostics
         shell: bash
@@ -93,9 +123,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          if grep -q '^exit_code=0$' TASK_LOGS/reader-results-tools-run-output.txt; then
+          if grep -q '^success$' /tmp/reader-results-tools-status; then
             git commit -m "feat: unify reader results and full-text tools"
           else
-            git commit -m "chore: record reader results tools patch failure"
+            git commit -m "chore: record reader results tools validation failure"
           fi
           git push origin HEAD:feat/reader-annotations-v2
