@@ -2758,9 +2758,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         if (pageNumber % 3 === 0) await new Promise(resolve => setTimeout(resolve, 0));
                     }
 
-                    const totalText = extractedPages.map(page => page.text).join("
-
-").trim();
+                    const totalText = extractedPages.map(page => page.text).join("\n\n").trim();
                     if (totalText.length < 80) {
                         throw new Error("未能识别到足够正文，请检查OCR模型与文件清晰度。");
                     }
