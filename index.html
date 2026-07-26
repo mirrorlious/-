@@ -108,6 +108,16 @@
             margin-top: 0;
         }
 
+        .reader-article-flow > * {
+            max-width: var(--reader-measure, 66ch);
+            margin-inline: auto;
+        }
+
+        .reader-article-flow > .reader-article-toolbar,
+        .reader-article-flow > .reader-article-wide {
+            max-width: none;
+        }
+
         .reader-side-panel {
             position: sticky;
             top: 80px;
@@ -1035,7 +1045,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
             if (readingMode === 'pure') {
                 return (
                     <div className="mb-8">
-                        <div className="text-gray-900 dark:text-gray-200 text-justify break-words" style={{ fontFamily: typographyConfig.fontFamily, fontSize: `${typographyConfig.fontSize}px`, lineHeight: typographyConfig.lineHeight }}>
+                        <div className="text-gray-900 dark:text-gray-200 text-left break-words" style={{ fontFamily: typographyConfig.readingFontFamily || typographyConfig.fontFamily, fontSize: `${typographyConfig.fontSize}px`, lineHeight: typographyConfig.lineHeight, marginBottom: `${typographyConfig.paragraphSpacing || 1.05}em` }}>
                             {text}
                         </div>
                     </div>
@@ -1147,7 +1157,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 >
                     <div 
                         className="text-gray-900 dark:text-gray-200 text-justify break-words relative z-10 transition-all cursor-pointer md:cursor-auto"
-                        style={{ fontFamily: typographyConfig.fontFamily, fontSize: `${typographyConfig.fontSize}px`, lineHeight: typographyConfig.lineHeight }}
+                        style={{ fontFamily: typographyConfig.readingFontFamily || typographyConfig.fontFamily, fontSize: `${typographyConfig.fontSize}px`, lineHeight: typographyConfig.lineHeight, marginBottom: `${typographyConfig.paragraphSpacing || 1.05}em` }}
                         onClick={handleParagraphClick}
                     >
                         {textSegments.map((seg, i) => <Fragment key={i}>{renderProcessedText(seg.text, seg.isTarget)}</Fragment>)}
@@ -1236,7 +1246,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                     {audioUrl && <div className="mt-3 animate-fade-in-down w-full max-w-sm"><audio src={audioUrl} controls className="h-9 w-full rounded-full" autoPlay /></div>}
                     
-                    {showTranslation && finalTranslationToShow && <div className="mt-4 text-gray-800 dark:text-gray-300 font-sans animate-fade-in-down whitespace-pre-wrap border-l-[3px] border-gray-300 dark:border-gray-600 pl-4 py-1 bg-gray-50/50 dark:bg-gray-800/50 rounded-r-lg" style={{ fontSize: `${Math.max(14, typographyConfig.fontSize - 2)}px`, lineHeight: typographyConfig.lineHeight }}>{finalTranslationToShow}</div>}
+                    {showTranslation && finalTranslationToShow && <div className="mt-4 text-gray-800 dark:text-gray-300 animate-fade-in-down whitespace-pre-wrap border-l-[3px] border-gray-300 dark:border-gray-600 pl-4 py-1 bg-gray-50/50 dark:bg-gray-800/50 rounded-r-lg" style={{ fontFamily: typographyConfig.chineseFontFamily || '"Noto Serif SC", STSong, serif', fontSize: `${Math.max(14, typographyConfig.fontSize - 2)}px`, lineHeight: typographyConfig.lineHeight }}>{finalTranslationToShow}</div>}
                     
                     {showAnalysis && analysisData && <SyntaxBreakdowns data={analysisData} />}
                     {showQuiz && quizData && (
@@ -1447,7 +1457,25 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 tts: { model: CURRENT_GEMINI_TTS_MODEL }
             }
         };
-        const DEFAULT_TYPOGRAPHY_CONFIG = { fontFamily: '"Noto Serif SC", STSong, "Times New Roman", serif', fontSize: 17, lineHeight: 1.9, paddingX: 6, theme: 'light' };
+        const DEFAULT_TYPOGRAPHY_CONFIG = {
+            preset: 'editorial',
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            readingFontFamily: 'Georgia, "Times New Roman", serif',
+            chineseFontFamily: '"Noto Serif SC", STSong, serif',
+            fontSize: 20,
+            lineHeight: 1.72,
+            paragraphSpacing: 1.05,
+            measure: 66,
+            paddingX: 6,
+            theme: 'light',
+            typographyMigrationVersion: 1
+        };
+        const TYPOGRAPHY_PRESETS = {
+            editorial: { readingFontFamily: 'Georgia, "Times New Roman", serif', chineseFontFamily: '"Noto Serif SC", STSong, serif', fontSize: 20, lineHeight: 1.72, paragraphSpacing: 1.05, measure: 66 },
+            modern: { readingFontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif', chineseFontFamily: 'system-ui, "Microsoft YaHei", sans-serif', fontSize: 18, lineHeight: 1.65, paragraphSpacing: 0.9, measure: 70 },
+            classic: { readingFontFamily: '"Times New Roman", Times, serif', chineseFontFamily: 'STSong, SimSun, serif', fontSize: 21, lineHeight: 1.85, paragraphSpacing: 1.2, measure: 62 },
+            custom: {}
+        };
         const LOCAL_STORAGE_KEY = 'yang-reader-state-v1';
         const API_KEY_SESSION_STORAGE_KEY = 'yang-reader-api-key-v1';
         const API_KEY_LOCAL_STORAGE_KEY = 'yang-reader-api-key-v1';
@@ -1746,6 +1774,9 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const initialTypographyConfig = {
                 ...DEFAULT_TYPOGRAPHY_CONFIG,
                 ...savedTypographyConfig,
+                readingFontFamily: savedTypographyConfig.readingFontFamily || savedTypographyConfig.fontFamily || DEFAULT_TYPOGRAPHY_CONFIG.readingFontFamily,
+                chineseFontFamily: savedTypographyConfig.chineseFontFamily || '"Noto Serif SC", STSong, serif',
+                typographyMigrationVersion: 1,
                 lineHeight: savedTypographyConfig.lineHeight === 2.4 ? DEFAULT_TYPOGRAPHY_CONFIG.lineHeight : (savedTypographyConfig.lineHeight ?? DEFAULT_TYPOGRAPHY_CONFIG.lineHeight)
             };
 
@@ -2320,6 +2351,20 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                         <svg className="w-4 h-4 mr-1.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10M9 8h6m-7 4h8m-9 4h10M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"></path></svg>
                                         阅读排版设置
                                     </h2>
+
+                                    <div className="mb-4">
+                                        <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">阅读预设</label>
+                                        <select
+                                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-blue-400 text-gray-800 dark:text-gray-200"
+                                            value={tempTypographyConfig.preset || 'custom'}
+                                            onChange={e => setTempTypographyConfig({ ...tempTypographyConfig, preset: e.target.value, ...(TYPOGRAPHY_PRESETS[e.target.value] || {}) })}
+                                        >
+                                            <option value="editorial">Editorial default</option>
+                                            <option value="modern">Modern</option>
+                                            <option value="classic">Classic</option>
+                                            <option value="custom">Custom</option>
+                                        </select>
+                                    </div>
                                     
                                     <div className="p-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl mb-5 overflow-hidden flex items-center justify-center min-h-[100px] transition-all duration-300"
                                          style={{
@@ -2327,7 +2372,12 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                              fontSize: `${tempTypographyConfig.fontSize}px`,
                                              lineHeight: tempTypographyConfig.lineHeight
                                          }}>
-                                        <p className="text-center text-gray-800 dark:text-gray-200">France, which prides itself as the global innovator of fashion...</p>
+                                         <div className="w-full text-left text-gray-800 dark:text-gray-200">
+                                             <p>France, which prides itself as the global innovator of fashion, has decided</p>
+                                             <p>its fashion industry has lost an absolute right to define physical beauty.</p>
+                                             <p className="mt-2 border-l-2 border-amber-400 pl-2 bg-amber-50/60 dark:bg-amber-900/20">Its lawmakers gave preliminary approval last week to a law.</p>
+                                             <p className="mt-2 text-gray-600 dark:text-gray-400" style={{ fontFamily: tempTypographyConfig.chineseFontFamily || '"Noto Serif SC", STSong, serif' }}>法国立法者上周初步批准了一项相关法律。</p>
+                                         </div>
                                     </div>
 
                                     <div className="space-y-6">
@@ -2336,7 +2386,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                             <select 
                                                 className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-blue-400 text-gray-800 dark:text-gray-200"
                                                 value={tempTypographyConfig.fontFamily}
-                                                onChange={e => setTempTypographyConfig({...tempTypographyConfig, fontFamily: e.target.value})}
+                                                onChange={e => setTempTypographyConfig({...tempTypographyConfig, preset: 'custom', fontFamily: e.target.value, readingFontFamily: e.target.value})}
                                             >
                                                 <option value='"Noto Serif SC", STSong, "Times New Roman", serif'>优雅宋体 (Serif)</option>
                                                 <option value='"Noto Sans SC", "Microsoft YaHei", Arial, sans-serif'>现代黑体 (Sans-serif)</option>
@@ -2367,7 +2417,15 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 <label>左右边距留白</label>
                                                 <span className="text-blue-600 dark:text-blue-400">{tempTypographyConfig.paddingX}%</span>
                                             </div>
-                                            <input type="range" min="0" max="25" step="1" className="w-full" value={tempTypographyConfig.paddingX} onChange={e => setTempTypographyConfig({...tempTypographyConfig, paddingX: parseInt(e.target.value)})} />
+                                            <input type="range" min="0" max="25" step="1" className="w-full" value={tempTypographyConfig.paddingX} onChange={e => setTempTypographyConfig({...tempTypographyConfig, preset: 'custom', paddingX: parseInt(e.target.value)})} />
+                                        </div>
+
+                                        <div>
+                                            <div className="flex justify-between text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                                <label>正文 measure</label>
+                                                <span className="text-blue-600 dark:text-blue-400">{tempTypographyConfig.measure || 66} ch</span>
+                                            </div>
+                                            <input type="range" min="48" max="78" step="1" className="w-full" value={tempTypographyConfig.measure || 66} onChange={e => setTempTypographyConfig({...tempTypographyConfig, preset: 'custom', measure: parseInt(e.target.value)})} />
                                         </div>
                                     </div>
 
@@ -2654,8 +2712,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                 </div>
                             ) : (
                                 <div className={`reader-workspace ${layoutMode === 'focus' ? 'reader-workspace-focus' : ''} ${layoutMode === 'split' && rightPanelOpen ? 'reader-workspace-split' : ''}`} style={layoutMode === 'split' && rightPanelOpen ? { gridTemplateColumns: `minmax(0, ${splitRatio}fr) minmax(380px, ${100 - splitRatio}fr)` } : undefined}>
-                                <article className="reader-main-column py-8 animate-fade-in relative transition-all" style={{ paddingLeft: `${typographyConfig.paddingX}%`, paddingRight: `${typographyConfig.paddingX}%` }}>
-                                    <div className="sticky top-16 z-30 -mx-2 sm:mx-0 mb-8 px-2 sm:px-0 py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur flex flex-col sm:flex-row sm:justify-center sm:items-center gap-2 sm:gap-3">
+                                <article className="reader-main-column reader-article-flow py-8 animate-fade-in relative transition-all" style={{ '--reader-measure': `${typographyConfig.measure || 66}ch`, paddingLeft: `clamp(16px, ${typographyConfig.paddingX || 6}vw, 96px)`, paddingRight: `clamp(16px, ${typographyConfig.paddingX || 6}vw, 96px)` }}>
+                                    <div className="reader-article-toolbar sticky top-16 z-30 -mx-2 sm:mx-0 mb-8 px-2 sm:px-0 py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur flex flex-col sm:flex-row sm:justify-center sm:items-center gap-2 sm:gap-3">
                                         <div className="w-full sm:w-auto bg-gray-100 dark:bg-gray-800 p-1 rounded-sm flex gap-1 border border-gray-200 dark:border-gray-700">
                                             <button onClick={() => setReadingMode('pure')} className={`flex-1 sm:flex-none min-h-[40px] px-4 sm:px-5 rounded-[2px] whitespace-nowrap text-[13px] font-medium transition-all ${readingMode === 'pure' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>纯净阅读</button>
                                             <button onClick={() => setReadingMode('intensive')} className={`flex-1 sm:flex-none min-h-[40px] px-4 sm:px-5 rounded-[2px] whitespace-nowrap text-[13px] font-medium transition-all ${readingMode === 'intensive' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>深度精读</button>

@@ -122,3 +122,18 @@ GitHub：未上传，等待用户本地验收。
 - The panel reuses the paragraph request result rather than issuing a second request, preventing duplicate analysis calls for the same action.
 - Validation: stage-7 page loaded successfully with no visible Babel compilation error text.
 - Next: consider the optional draggable split divider in stage 8.
+
+## 14. Stage 8: Optional split divider
+
+- Status: intentionally deferred; the task permits this as optional.
+- The fixed 58/42 ratio and persisted `splitRatio` state remain available for a future drag interaction without introducing another interaction surface in this pass.
+
+## 15. Stage 9: Editorial typography and measure
+
+- Status: completed locally.
+- Added editorial, modern, classic, and custom presets; default reading size is 20px, line-height 1.72, paragraph spacing 1.05em, and measure 66ch.
+- Separated English reading and Chinese translation font stacks using system-available fallback stacks only; no font files were added, committed, or distributed.
+- Changed article flow to left-aligned readable measure with independent page padding; preview now shows multiple English lines, a highlighted line, and a Chinese translation.
+- Added one-time-compatible migration defaults for existing typography settings and retained local persistence through the existing state key.
+- Validation: typography modal opened successfully with preset, measure, and preview controls; stage-9 page rendered without visible Babel compilation error text.
+- Next: perform visual/accessibility regression and final manual acceptance.
