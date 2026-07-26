@@ -9,7 +9,8 @@
 - 段落精翻、长难句拆解、阅读理解出题
 - 全文逻辑剖析和双语思维导图
 - Gemini TTS 外教领读
-- 图片/PDF 文本提取
+- 本地 PDF 原样阅读（分页、缩放、适宽、下载），默认不提取文字、不上传文件
+- 图片/PDF 文本提取（仅在用户主动选择后调用已配置模型）
 - API 路由设置，支持 Google Gemini 原生协议和 OpenAI 兼容协议
 - 本地阅读历史、API 设置、排版设置、自定义词库持久化
 - 可选 Firebase 沙盒同步
@@ -34,5 +35,6 @@ python -m http.server 5173
 
 ## 说明
 
-源码里引用了 React、ReactDOM、Babel、Tailwind、Firebase 和外部词库/真题语料 CDN。普通浏览器环境没有 Firebase 配置时，应用会自动使用 `localStorage` 保存阅读历史和个人设置。
+源码里引用了 React、ReactDOM、Babel、Tailwind、PDF.js、Firebase 和外部词库/真题语料 CDN。普通浏览器环境没有 Firebase 配置时，应用会自动使用 `localStorage` 保存阅读历史和个人设置。
 
+受版权保护的期刊或书籍 PDF 不应提交到公开应用仓库。当前的“原样阅读”通过浏览器本地文件选择器打开文件，PDF 内容不会保存进仓库。若要建立云端阅读库，建议把文件放在独立私有仓库或对象存储中，并通过带身份验证的后端读取；不要把 GitHub Token 写入前端代码。
