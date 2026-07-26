@@ -841,6 +841,17 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         {textSegments.map((seg, i) => <Fragment key={i}>{renderProcessedText(seg.text, seg.isTarget)}</Fragment>)}
                     </div>
 
+                    {!showActions && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setIsInteracting(true); }}
+                            className="mt-2 inline-flex items-center gap-1.5 min-h-[36px] px-2 text-[12px] font-medium text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors md:opacity-0 md:group-hover:opacity-100 focus:opacity-100"
+                            aria-label="展开本段阅读工具"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v12m6-6H6"></path></svg>
+                            <span>分析本段</span>
+                        </button>
+                    )}
+
                     {activeNote && (
                         <div className="mt-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl animate-fade-in-down relative shadow-lg z-20">
                             <button onClick={() => setActiveNote(null)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full p-1 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
@@ -867,26 +878,26 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         <button 
                             onClick={handleToggleTrans} 
                             disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow} 
-                            className={`flex items-center space-x-1.5 text-[11px] font-medium border px-3.5 py-1.5 rounded-full transition-all ${showTranslation ? 'bg-gray-800 dark:bg-gray-700 text-white border-gray-800 dark:border-gray-600' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 shadow-sm'}`}
+                            className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all ${showTranslation ? 'bg-gray-800 dark:bg-gray-700 text-white border-gray-800 dark:border-gray-600' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
                         >
                             <span className="font-serif italic text-[11px]">文A</span>
                             <span>{(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? "处理中..." : showTranslation ? "收起精翻" : "展开精翻"}</span>
                         </button>
 
                         {isConsideredParagraph && (
-                            <button onClick={handleToggleAnalysis} disabled={isAnalysisLoading} className={`flex items-center space-x-1.5 text-[11px] font-medium border px-3.5 py-1.5 rounded-full transition-all ${showAnalysis ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800' : 'bg-white dark:bg-gray-800 text-amber-700 dark:text-amber-500 border-amber-200 dark:border-gray-700 hover:bg-amber-50 dark:hover:bg-gray-700 shadow-sm'}`}>
+                            <button onClick={handleToggleAnalysis} disabled={isAnalysisLoading} className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all ${showAnalysis ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800' : 'bg-white dark:bg-gray-800 text-amber-700 dark:text-amber-500 border-amber-200 dark:border-gray-700 hover:bg-amber-50 dark:hover:bg-gray-700'}`}>
                                 {isAnalysisLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2-1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>}
                                 <span>{isAnalysisLoading ? "智能解构中..." : showAnalysis ? "收起句法" : "长难句解构"}</span>
                             </button>
                         )}
                         {!audioUrl && isConsideredParagraph && (
-                             <button onClick={handleToggleAudio} disabled={isAudioLoading} className={`flex items-center space-x-1.5 text-[11px] font-medium border px-3.5 py-1.5 rounded-full transition-all bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700 shadow-sm`}>
+                             <button onClick={handleToggleAudio} disabled={isAudioLoading} className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700`}>
                                 {isAudioLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <span>🎙️</span> }
                                 <span>{isAudioLoading ? "音频请求中..." : "外教领读"}</span>
                              </button>
                         )}
                         {isConsideredParagraph && (
-                             <button onClick={handleToggleQuiz} disabled={isQuizLoading} className={`flex items-center space-x-1.5 text-[11px] font-medium border px-3.5 py-1.5 rounded-full transition-all ${showQuiz ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800' : 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700 shadow-sm'}`}>
+                             <button onClick={handleToggleQuiz} disabled={isQuizLoading} className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all ${showQuiz ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800' : 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700'}`}>
                                 {isQuizLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <span>📝</span> }
                                 <span>{isQuizLoading ? "预测中..." : showQuiz ? "收起模拟题" : "出题测试"}</span>
                              </button>
@@ -935,7 +946,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
         };
 
         const DEFAULT_API_CONFIG = { apiType: 'gemini', key: '', model: 'gemini-2.0-flash', baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta' };
-        const DEFAULT_TYPOGRAPHY_CONFIG = { fontFamily: '"Noto Serif SC", STSong, "Times New Roman", serif', fontSize: 17, lineHeight: 2.4, paddingX: 6, theme: 'light' };
+        const DEFAULT_TYPOGRAPHY_CONFIG = { fontFamily: '"Noto Serif SC", STSong, "Times New Roman", serif', fontSize: 17, lineHeight: 1.9, paddingX: 6, theme: 'light' };
         const LOCAL_STORAGE_KEY = 'yang-reader-state-v1';
 
         const App = () => {
@@ -957,19 +968,27 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 }
             };
 
+            const savedTypographyConfig = localState.typographyConfig || {};
+            const initialTypographyConfig = {
+                ...DEFAULT_TYPOGRAPHY_CONFIG,
+                ...savedTypographyConfig,
+                lineHeight: savedTypographyConfig.lineHeight === 2.4 ? DEFAULT_TYPOGRAPHY_CONFIG.lineHeight : (savedTypographyConfig.lineHeight ?? DEFAULT_TYPOGRAPHY_CONFIG.lineHeight)
+            };
+
             const [apiConfig, setApiConfig] = useState({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}) });
             const [isApiModalOpen, setIsApiModalOpen] = useState(false);
             const [tempApiConfig, setTempApiConfig] = useState({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}) });
 
-            const [typographyConfig, setTypographyConfig] = useState({ ...DEFAULT_TYPOGRAPHY_CONFIG, ...(localState.typographyConfig || {}) });
+            const [typographyConfig, setTypographyConfig] = useState(initialTypographyConfig);
             const [isTypographyModalOpen, setIsTypographyModalOpen] = useState(false);
-            const [tempTypographyConfig, setTempTypographyConfig] = useState({ ...DEFAULT_TYPOGRAPHY_CONFIG, ...(localState.typographyConfig || {}) });
+            const [tempTypographyConfig, setTempTypographyConfig] = useState(initialTypographyConfig);
 
             const [inputText, setInputText] = useState("");
             const [isReadingMode, setIsReadingMode] = useState(false);
             const [readingMode, setReadingMode] = useState('intensive'); 
+            const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
             
-            const [highlightMode, setHighlightMode] = useState('both'); 
+            const [highlightMode, setHighlightMode] = useState('red');
             
             const [fullTranslations, setFullTranslations] = useState([]);
             const [isFullTransLoading, setIsFullTransLoading] = useState(false);
@@ -1251,7 +1270,11 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const defaultText = `France, which prides itself as the global innovator of fashion, has decided its fashion industry has lost an absolute right to define physical beauty for women. Its lawmakers gave preliminary approval last week to a law that would make it a crime to employ ultra-thin models on runways. The parliament also agreed to ban websites that "incite excessive thinness" by promoting extreme dieting.`;
 
             const handleStartReading = () => {
-                const finalContent = inputText.trim() || defaultText;
+                const finalContent = inputText.trim();
+                if (!finalContent) {
+                    window.showToast("请先粘贴文章、上传文件或加载示例", "warning");
+                    return;
+                }
                 setInputText(finalContent);
                 setIsReadingMode(true);
                 setFullMapData(null); 
@@ -1266,7 +1289,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     text: finalContent, fullMapData: null, fullTranslations: [], createdAt: Date.now() 
                 };
                 saveHistoryToCloud(newRecord);
-                fetchFullTranslation(finalContent, newId);
+                window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'auto' }));
             };
 
             const handleFileUpload = async (e) => {
@@ -1568,74 +1591,95 @@ ${JSON.stringify(miniCorpus, null, 2)}
                             </div>
                         )}
 
-                        <header className="bg-white dark:bg-gray-900 sticky top-0 z-40 border-b border-gray-100 dark:border-gray-800 shadow-sm transition-colors">
-                            <div className="max-w-[850px] mx-auto px-5 py-3.5 flex justify-between items-center">
-                                <div className="flex items-center space-x-2">
-                                    <svg className="w-5 h-5 text-gray-800 dark:text-gray-200" fill="currentColor" viewBox="0 0 24 24"><path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/></svg>
-                                    <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 tracking-tight whitespace-nowrap">杨的外刊阅读器</h1>
+                        <header className="bg-white/95 dark:bg-gray-900/95 backdrop-blur sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800 transition-colors">
+                            <div className="max-w-[960px] mx-auto h-16 px-3 sm:px-5 flex items-center gap-3">
+                                <div className="relative min-w-0 flex-1 flex items-center gap-2">
+                                    <button onClick={() => setIsHeaderMenuOpen(prev => !prev)} className="w-10 h-10 shrink-0 grid place-items-center rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="打开主菜单" title="主菜单">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                                    </button>
+                                    <h1 className="min-w-0 truncate text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">杨的外刊阅读器</h1>
+                                    {isHeaderMenuOpen && (
+                                        <>
+                                            <button className="fixed inset-0 z-40 cursor-default" onClick={() => setIsHeaderMenuOpen(false)} aria-label="关闭主菜单"></button>
+                                            <div className="absolute left-0 top-12 z-50 w-64 p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl">
+                                                <div className="px-3 py-2 mb-1 text-[11px] text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                                                    {corpusCount} 句真题 · {Object.keys(presetDict).length} 个预设词 · {Object.keys(hardDict).length} 个生词
+                                                </div>
+                                                <button onClick={() => { setIsHistoryDrawerOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-md text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">阅读库</button>
+                                                <button onClick={() => { setIsTypographyModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-md text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">阅读排版</button>
+                                                <button onClick={() => { setIsDictModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-md text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">个人词库</button>
+                                                <button onClick={() => { setIsApiModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-md text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">模型配置</button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                                <div className="flex items-center space-x-2 overflow-x-auto custom-scrollbar">
-                                    <button onClick={handleToggleTheme} className="text-[14px] font-medium text-amber-500 bg-gray-50 hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700 px-2.5 py-1.5 rounded flex items-center transition-colors whitespace-nowrap border border-gray-200 dark:border-gray-700">
-                                        {typographyConfig.theme === 'dark' ? '☀️ 日间' : '🌙 夜间'}
-                                    </button>
-                                    <div className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50/80 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-md text-[11px] font-medium border border-emerald-100/50 dark:border-emerald-800/50 whitespace-nowrap">
-                                        <span>考研真题: {corpusCount}句</span><span className="w-px h-3 bg-emerald-200 dark:bg-emerald-700"></span>
-                                        <span>预设库: {Object.keys(presetDict).length}词</span><span className="w-px h-3 bg-emerald-200 dark:bg-emerald-700"></span>
-                                        <span className="text-red-600 dark:text-red-400 font-bold">生词本: {Object.keys(hardDict).length}词</span>
+                                <div className="hidden lg:flex shrink-0 items-center gap-1">
+                                    <div className="mr-2 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                        <span>{corpusCount} 句真题</span><span className="w-px h-3 bg-gray-200 dark:bg-gray-700"></span><span>{Object.keys(hardDict).length} 个生词</span>
                                     </div>
-                                    <button onClick={() => setIsTypographyModalOpen(true)} className="text-[12px] font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 px-2.5 py-1.5 rounded flex items-center transition-colors whitespace-nowrap">
-                                        🎨 排版设置
+                                    <button onClick={() => setIsTypographyModalOpen(true)} className="min-h-[40px] px-3 inline-flex items-center gap-2 rounded-md text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M7 12h10M10 18h4"></path></svg>排版
                                     </button>
-                                    <button onClick={() => setIsApiModalOpen(true)} className="text-[12px] font-medium text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 px-2.5 py-1.5 rounded flex items-center transition-colors whitespace-nowrap">
-                                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>模型配置
+                                    <button onClick={handleToggleTheme} className="w-10 h-10 grid place-items-center rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label={typographyConfig.theme === 'dark' ? '切换到日间模式' : '切换到夜间模式'}>
+                                        {typographyConfig.theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36l-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0l-1.42-1.42M7.06 7.06L5.64 5.64M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.35 15.35A9 9 0 018.65 3.65a9 9 0 1011.7 11.7z"></path></svg>}
                                     </button>
-                                    <button onClick={() => setIsDictModalOpen(true)} className="text-[12px] font-medium text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 px-2.5 py-1.5 rounded flex items-center transition-colors whitespace-nowrap">
-                                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>个人词库
+                                    {isReadingMode && <button onClick={() => setIsReadingMode(false)} className="min-h-[40px] px-3 inline-flex items-center gap-1.5 rounded-md text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>退出</button>}
+                                </div>
+                                <div className="flex lg:hidden shrink-0 items-center gap-1">
+                                    <button onClick={handleToggleTheme} className="w-10 h-10 grid place-items-center rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label={typographyConfig.theme === 'dark' ? '切换到日间模式' : '切换到夜间模式'}>
+                                        {typographyConfig.theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36l-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0l-1.42-1.42M7.06 7.06L5.64 5.64M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.35 15.35A9 9 0 018.65 3.65a9 9 0 1011.7 11.7z"></path></svg>}
                                     </button>
-                                    <button onClick={() => setIsHistoryDrawerOpen(true)} className="text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/50 p-1.5 rounded flex items-center transition-colors shrink-0" title="阅读库"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"></path></svg></button>
-                                    {isReadingMode && <button onClick={() => setIsReadingMode(false)} className="text-[12px] font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 shrink-0">退出阅读</button>}
+                                    {isReadingMode && <button onClick={() => setIsReadingMode(false)} className="w-10 h-10 grid place-items-center rounded-md text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="退出阅读"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>}
                                 </div>
                             </div>
                         </header>
 
-                        <main className="max-w-3xl mx-auto sm:my-8 bg-white dark:bg-gray-900 sm:shadow-sm sm:border border-gray-100 dark:border-gray-800 sm:rounded-xl min-h-[85vh] transition-colors">
+                        <main className="max-w-3xl mx-auto sm:my-8 bg-white dark:bg-gray-900 sm:border border-gray-200 dark:border-gray-800 sm:rounded-lg min-h-[85vh] transition-colors">
                             {!isReadingMode ? (
-                                <div className="p-6 md:p-10 space-y-6 animate-fade-in">
-                                    <div className="flex flex-wrap gap-3 items-center border-b border-gray-100 dark:border-gray-800 pb-4">
+                                <div className="p-5 sm:p-8 md:p-10 space-y-5 animate-fade-in">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-100 dark:border-gray-800 pb-5">
+                                         <div>
+                                             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">开始一篇阅读</h2>
+                                             <p className="mt-1 text-[13px] text-gray-500 dark:text-gray-400">粘贴文章，或从文件导入</p>
+                                         </div>
                                          <input type="file" accept="image/*, application/pdf" multiple className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-                                         <button onClick={() => fileInputRef.current?.click()} disabled={isExtracting} className="flex items-center text-[14px] font-medium text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                                             <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                                             {isExtracting ? "高速解析中..." : "批量提取 (建议每份PDF < 4MB)"}
-                                         </button>
+                                         <div className="flex flex-wrap gap-2">
+                                             <button onClick={() => setInputText(defaultText)} className="min-h-[42px] px-3 rounded-md text-[13px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">加载示例</button>
+                                             <button onClick={() => fileInputRef.current?.click()} disabled={isExtracting} className="min-h-[42px] flex items-center text-[13px] font-medium text-gray-700 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 px-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                                                 <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                 {isExtracting ? "解析中..." : "导入文件"}
+                                             </button>
+                                         </div>
                                     </div>
-                                    <textarea className="w-full h-[55vh] p-2 bg-transparent outline-none resize-none font-serif text-[15.5px] leading-relaxed text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600" placeholder="在此粘贴外刊文本，或使用上方按钮提取内容..." value={inputText} onChange={(e) => setInputText(e.target.value)} />
-                                    <button onClick={handleStartReading} disabled={isExtracting} className="w-full bg-gray-900 dark:bg-blue-600 text-white py-4 rounded-xl font-medium shadow-md text-[15px] hover:bg-gray-800 dark:hover:bg-blue-700 active:scale-[0.98] transition-transform">进入精读环境</button>
+                                    <textarea className="w-full h-[48vh] min-h-[320px] p-4 bg-gray-50/60 dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 rounded-md outline-none resize-none font-serif text-[15.5px] leading-relaxed text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:border-gray-400 dark:focus:border-gray-600" placeholder="粘贴英文文章..." value={inputText} onChange={(e) => setInputText(e.target.value)} />
+                                    <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
+                                        <span className="text-[12px] text-gray-400 dark:text-gray-500">{inputText.trim() ? `${inputText.trim().split(/\s+/).length} 词` : "尚未添加内容"}</span>
+                                        <button onClick={handleStartReading} disabled={isExtracting || !inputText.trim()} className="w-full sm:w-auto min-h-[46px] bg-gray-900 dark:bg-blue-600 text-white px-8 rounded-md font-medium text-[14px] hover:bg-gray-800 dark:hover:bg-blue-700 active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">进入精读</button>
+                                    </div>
                                 </div>
                             ) : (
                                 <article className="py-8 animate-fade-in relative transition-all" style={{ paddingLeft: `${typographyConfig.paddingX}%`, paddingRight: `${typographyConfig.paddingX}%` }}>
-                                    <div className="flex justify-center mb-10 items-center space-x-4">
-                                        <div className="bg-gray-100 dark:bg-gray-800 p-1 rounded-xl flex space-x-1 border border-gray-200 dark:border-gray-700">
-                                            <button onClick={() => setReadingMode('pure')} className={`px-6 py-2 rounded-lg text-[13px] font-medium transition-all flex items-center ${readingMode === 'pure' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>纯净文本</button>
-                                            <button onClick={() => setReadingMode('intensive')} className={`px-6 py-2 rounded-lg text-[13px] font-medium transition-all flex items-center ${readingMode === 'intensive' ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>深度精读</button>
+                                    <div className="sticky top-16 z-30 -mx-2 sm:mx-0 mb-8 px-2 sm:px-0 py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur flex flex-col sm:flex-row sm:justify-center sm:items-center gap-2 sm:gap-3">
+                                        <div className="w-full sm:w-auto bg-gray-100 dark:bg-gray-800 p-1 rounded-lg flex gap-1 border border-gray-200 dark:border-gray-700">
+                                            <button onClick={() => setReadingMode('pure')} className={`flex-1 sm:flex-none min-h-[40px] px-4 sm:px-5 rounded-md whitespace-nowrap text-[13px] font-medium transition-all ${readingMode === 'pure' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>纯净阅读</button>
+                                            <button onClick={() => setReadingMode('intensive')} className={`flex-1 sm:flex-none min-h-[40px] px-4 sm:px-5 rounded-md whitespace-nowrap text-[13px] font-medium transition-all ${readingMode === 'intensive' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>深度精读</button>
                                         </div>
                                         
                                         {readingMode === 'intensive' && (
-                                            <div className="flex items-center space-x-4 animate-fade-in">
-                                                <div className="flex items-center space-x-2">
-                                                    <select 
-                                                        value={highlightMode} 
-                                                        onChange={(e) => setHighlightMode(e.target.value)} 
-                                                        className="w-auto h-8 px-2 rounded-md text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer shadow-sm"
-                                                    >
-                                                        <option value="both">✨ 全部高亮 (红+蓝)</option>
-                                                        <option value="red">🔴 仅考研生词 (红)</option>
-                                                        <option value="blue">🔵 仅基础词汇 (蓝)</option>
-                                                        <option value="none">⚪ 关闭高亮</option>
-                                                    </select>
-                                                </div>
-                                                <button onClick={handleToggleGlobalLogic} disabled={isGlobalLogicLoading} className={`flex items-center space-x-1.5 text-[12px] font-medium border px-3 py-1.5 rounded-lg transition-all ${showGlobalLogic ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800 shadow-sm' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                                            <div className="w-full sm:w-auto flex items-center gap-2 animate-fade-in">
+                                                <select
+                                                    value={highlightMode}
+                                                    onChange={(e) => setHighlightMode(e.target.value)}
+                                                    className="min-w-0 flex-1 sm:w-auto h-10 px-3 rounded-md text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-gray-400 cursor-pointer"
+                                                >
+                                                    <option value="red">考研生词</option>
+                                                    <option value="both">全部词汇</option>
+                                                    <option value="blue">基础词汇</option>
+                                                    <option value="none">关闭高亮</option>
+                                                </select>
+                                                <button onClick={handleToggleGlobalLogic} disabled={isGlobalLogicLoading} className={`min-h-[40px] shrink-0 flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium border px-3 rounded-md transition-all ${showGlobalLogic ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-gray-900 dark:border-gray-100' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                                                     {isGlobalLogicLoading ? <svg className="animate-spin w-3.5 h-3.5 loader-spin text-teal-600 dark:text-teal-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className={`w-3.5 h-3.5 ${showGlobalLogic ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> }
-                                                    <span>{isGlobalLogicLoading ? "剖析中..." : showGlobalLogic ? "收起全文逻辑" : "全文逻辑剖析"}</span>
+                                                    <span>{isGlobalLogicLoading ? "分析中..." : showGlobalLogic ? "收起逻辑" : "全文逻辑"}</span>
                                                 </button>
                                             </div>
                                         )}
