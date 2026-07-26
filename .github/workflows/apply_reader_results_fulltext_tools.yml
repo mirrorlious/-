@@ -19,13 +19,27 @@ jobs:
           ref: feat/reader-annotations-v2
           fetch-depth: 0
 
-      - name: Apply scoped patch
-        shell: bash
-        run: python scripts/one_shot_results_fulltext_tools.py
-
-      - name: Validate source
+      - name: Apply patch and capture output
         shell: bash
         run: |
+          set +e
+          python scripts/one_shot_results_fulltext_tools.py > /tmp/results-tools.log 2>&1
+          code=$?
+          set -e
+          {
+            echo "exit_code=$code"
+            echo "commit=${GITHUB_SHA}"
+            echo "---- output ----"
+            cat /tmp/results-tools.log
+          } > TASK_LOGS/reader-results-tools-run-output.txt
+
+      - name: Validate successful patch
+        shell: bash
+        run: |
+          if ! grep -q '^exit_code=0$' TASK_LOGS/reader-results-tools-run-output.txt; then
+            echo "Patch failed; diagnostics will be committed"
+            exit 0
+          fi
           git diff --check
           python - <<'PY'
           from pathlib import Path
@@ -45,15 +59,11 @@ jobs:
               raise SystemExit(f'Missing markers: {missing}')
           if text.count('<script') != text.count('</script>'):
               raise SystemExit('Script tag count mismatch')
-          print('Static markers passed')
-          PY
-          python - <<'PY'
-          from pathlib import Path
-          text = Path('index.html').read_text(encoding='utf-8')
           marker = '<script type="text/babel" data-type="module">'
           start = text.index(marker) + len(marker)
           end = text.index('</script>', start)
           Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
+          print('Static markers passed')
           PY
           npm init -y >/dev/null 2>&1
           npm install --no-save @babel/core @babel/preset-react >/dev/null 2>&1
@@ -69,11 +79,15 @@ jobs:
           console.log('Babel JSX parse passed');
           NODE
 
-      - name: Commit feature
+      - name: Commit feature or diagnostics
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "feat: unify reader results and full-text tools"
+          if grep -q '^exit_code=0$' TASK_LOGS/reader-results-tools-run-output.txt; then
+            git commit -m "feat: unify reader results and full-text tools"
+          else
+            git commit -m "chore: record reader results tools patch failure"
+          fi
           git push origin HEAD:feat/reader-annotations-v2
