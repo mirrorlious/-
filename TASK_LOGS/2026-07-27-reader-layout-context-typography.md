@@ -111,6 +111,6 @@ GitHub：未上传，等待用户本地验收。
 - Status: implemented locally; manual drag selection remains part of final acceptance.
 - Added `selectionchange`, mouseup, and keyup tracking scoped to each paragraph DOM node; selections outside the article paragraph do not create the toolbar.
 - Added copy, selected-text translation, local speech, and more actions. Translation receives only the selected text and stores its result locally in the paragraph.
-- Validation: stage-6 page loaded successfully with no visible Babel error text; code passed `git diff --check` before commit.
+- Validation: stage-6 page loaded successfully with no visible Babel error text; the trailing whitespace found during commit was removed and the final check passes.
 - Known limitation: automated browser tooling in this environment does not expose text-selection helpers, so drag-selection positioning needs manual validation.
 - Next: connect right-panel analysis behavior in stage 7.
