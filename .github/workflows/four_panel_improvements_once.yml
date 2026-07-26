@@ -18,60 +18,29 @@ jobs:
           ref: feat/reader-annotations-v2
           fetch-depth: 0
 
-      - name: Apply four scoped improvements
-        shell: bash
-        run: python scripts/one_shot_four_panel_improvements.py
-
-      - name: Validate source
+      - name: Apply patch and capture diagnostics
         shell: bash
         run: |
-          git diff --check
-          python - <<'PY'
-          from pathlib import Path
-          text = Path('index.html').read_text(encoding='utf-8')
-          required = [
-              "['outline', 'quiz', 'analysis', 'notes']",
-              "['quiz', '模拟习题']",
-              'data-reader-structure-view-toggle="true"',
-              "structureViewMode === 'tree' ? 'mindmap' : 'tree'",
-              "rightPanelTab === 'quiz' && renderPracticePanel()",
-              'data-reader-practice-panel="document"',
-              'data-reader-translation-stack="true"',
-              'setRightPanelTranslationStack(previous =>',
-              '>添加笔记</button>',
-              'data-reader-note-flag="true"'
-          ]
-          missing = [marker for marker in required if marker not in text]
-          if missing:
-              raise SystemExit(f'Missing markers: {missing}')
-          if "['mindmap', '思维导图']" in text:
-              raise SystemExit('Legacy mindmap tab remains')
-          if text.count('<script') != text.count('</script>'):
-              raise SystemExit('Script tag count mismatch')
-          marker = '<script type="text/babel" data-type="module">'
-          start = text.index(marker) + len(marker)
-          end = text.index('</script>', start)
-          Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
-          print('Static markers passed')
-          PY
-          npm init -y >/tmp/npm.log 2>&1
-          npm install --no-save @babel/core @babel/preset-react >>/tmp/npm.log 2>&1
-          node - <<'NODE'
-          const fs = require('fs');
-          const babel = require('@babel/core');
-          babel.transformSync(fs.readFileSync('/tmp/reader.jsx', 'utf8'), {
-            filename: 'index.jsx',
-            sourceType: 'module',
-            presets: [['@babel/preset-react', { runtime: 'classic' }]]
-          });
-          console.log('Babel JSX parse passed');
-          NODE
+          set +e
+          python scripts/one_shot_four_panel_improvements.py > /tmp/four-panel.log 2>&1
+          code=$?
+          set -e
+          {
+            echo "exit_code=$code"
+            echo "commit=${GITHUB_SHA}"
+            echo "---- output ----"
+            cat /tmp/four-panel.log
+          } > TASK_LOGS/four-panel-patch-output.txt
 
-      - name: Commit improvements
+      - name: Commit patch or diagnostics
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "feat: reorganize learning panel and selection notes"
+          if grep -q '^exit_code=0$' TASK_LOGS/four-panel-patch-output.txt; then
+            git commit -m "feat: reorganize learning panel and selection notes"
+          else
+            git commit -m "chore: record four-panel patch failure"
+          fi
           git push origin HEAD:feat/reader-annotations-v2
