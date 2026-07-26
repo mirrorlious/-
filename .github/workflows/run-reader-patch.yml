@@ -15,18 +15,17 @@ jobs:
     if: github.head_ref == 'feat/reader-polish-book-import'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feat/reader-polish-book-import
-          fetch-depth: 0
-          show-progress: false
+      - name: Checkout feature branch quietly
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone --quiet --single-branch --branch feat/reader-polish-book-import "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
 
       - name: Decode and apply patch
         id: patch
         continue-on-error: true
         shell: bash
         run: |
-          set -o pipefail
           base64 -d scripts/apply_reader_improvements.py.gz.b64 | gzip -d > /tmp/apply_reader_improvements.py
           python -m py_compile /tmp/apply_reader_improvements.py
           python /tmp/apply_reader_improvements.py > /tmp/reader-patch.log 2>&1
