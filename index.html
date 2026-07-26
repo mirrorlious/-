@@ -359,10 +359,14 @@
             return result.candidates[0].content.parts[0].text;
         };
 
-        const callLLM = async (prompt, apiConfig, isJson = false) => {
-            const normalizedConfig = normalizeApiConfig(apiConfig);
+        const callLLM = async (prompt, apiConfig, isJson = false, task = 'analysis') => {
+            const normalizedConfig = resolveTaskApiConfig(apiConfig, task);
             const type = normalizedConfig?.apiType || 'gemini';
             const key = normalizedConfig?.key || window.apiKey;
+            const cacheKey = await buildCacheKey('llm', prompt, normalizedConfig, { task, isJson });
+            const cached = await readReaderStore('ai-cache', cacheKey);
+            if (cached) return cached.value;
+            let value;
             
             if (type === 'openai') {
                 const endpoint = buildOpenAIEndpoint(normalizedConfig?.baseUrl);
@@ -377,8 +381,7 @@
                 });
                 if (!result.choices || result.choices.length === 0) throw new Error("OpenAI API 未返回有效内容");
                 let text = result.choices[0].message.content;
-                if (isJson) return window.safeParseJSON(text);
-                return text.trim();
+                value = isJson ? window.safeParseJSON(text) : text.trim();
             } else {
                 const endpoint = getEndpoint(normalizedConfig);
                 const payload = { contents: [{ parts: [{ text: prompt }] }] };
@@ -388,9 +391,10 @@
                     body: JSON.stringify(payload)
                 });
                 let text = getCandidateText(result);
-                if (isJson) return window.safeParseJSON(text);
-                return text.trim();
+                value = isJson ? window.safeParseJSON(text) : text.trim();
             }
+            await writeReaderStore('ai-cache', { key: cacheKey, value, createdAt: Date.now(), task });
+            return value;
         };
 
         const callGeminiFullTranslation = async (fullText, apiConfig) => {
@@ -505,7 +509,11 @@ ${JSON.stringify(miniCorpus, null, 2)}
         };
 
         const callGeminiTTS = async (text, apiConfig) => {
-            const endpoint = getEndpoint(apiConfig, true);
+            const normalizedConfig = resolveTaskApiConfig(apiConfig, 'tts');
+            const cacheKey = await buildCacheKey('tts', text, normalizedConfig, { voice: 'Aoede' });
+            const cached = await readReaderStore('tts-cache', cacheKey);
+            if (cached?.blob) return URL.createObjectURL(cached.blob);
+            const endpoint = getEndpoint(normalizedConfig, true);
             const payload = {
                 contents: [{ parts: [{ text: `Please read clearly: ${text}` }] }],
                 generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
@@ -513,7 +521,20 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const result = await fetchWithRetry(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const base64PCM = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
             if (!base64PCM) throw new Error("API 未返回有效音频数据");
-            return createWavFileFromPCM(base64PCM, 24000);
+            const audioUrl = createWavFileFromPCM(base64PCM, 24000);
+            try {
+                const response = await fetch(audioUrl);
+                const blob = await response.blob();
+                await writeReaderStore('tts-cache', { key: cacheKey, blob, createdAt: Date.now() });
+            } catch (error) {
+                console.warn('TTS cache save failed');
+            }
+            const stored = await readReaderStore('tts-cache', cacheKey);
+            if (stored?.blob) {
+                URL.revokeObjectURL(audioUrl);
+                return URL.createObjectURL(stored.blob);
+            }
+            return audioUrl;
         };
 
         const createWavFileFromPCM = (base64PCM, sampleRate = 24000) => {
@@ -534,7 +555,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
         const extractTextFromMedia = async (base64Data, mimeType, apiConfig) => {
             const prompt = "Extract English text accurately. CRITICAL: Fix physical line breaks mid-sentence so paragraphs are continuous. Separate different paragraphs with double newlines strictly. Output ONLY the English text.";
-            const normalizedConfig = normalizeApiConfig(apiConfig);
+            const normalizedConfig = resolveTaskApiConfig(apiConfig, 'ocr');
             const type = normalizedConfig?.apiType || 'gemini';
 
             if (type === 'openai') {
@@ -846,6 +867,19 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 }
             };
 
+            const handleLocalSpeech = (e) => {
+                e.stopPropagation();
+                if (!window.speechSynthesis) {
+                    window.showToast('当前浏览器不支持本地朗读', 'warning');
+                    return;
+                }
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'en-US';
+                utterance.rate = 0.95;
+                window.speechSynthesis.speak(utterance);
+            };
+
             const handleToggleQuiz = async (e) => {
                 e.stopPropagation();
                 if (showQuiz) { setShowQuiz(false); return; }
@@ -1046,6 +1080,11 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                 {isAnalysisLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2-1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>}
                                 <span>{isAnalysisLoading ? "智能解构中..." : showAnalysis ? "收起句法" : "长难句解构"}</span>
                             </button>
+                        )}
+                        {!audioUrl && isConsideredParagraph && (
+                             <button onClick={handleLocalSpeech} className="min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-gray-700 hover:bg-emerald-50 dark:hover:bg-gray-700">
+                                 <span>本地朗读</span>
+                             </button>
                         )}
                         {!audioUrl && isConsideredParagraph && (
                              <button onClick={handleToggleAudio} disabled={isAudioLoading} className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700`}>
@@ -1264,9 +1303,120 @@ ${JSON.stringify(miniCorpus, null, 2)}
             );
         };
 
-        const DEFAULT_API_CONFIG = { apiType: 'gemini', key: '', model: CURRENT_GEMINI_TEXT_MODEL, baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta' };
+        const DEFAULT_API_CONFIG = {
+            apiType: 'gemini', key: '', model: CURRENT_GEMINI_TEXT_MODEL,
+            baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta',
+            rememberKey: false,
+            taskRoutes: {
+                analysis: { model: CURRENT_GEMINI_TEXT_MODEL },
+                ocr: { model: CURRENT_GEMINI_TEXT_MODEL },
+                tts: { model: CURRENT_GEMINI_TTS_MODEL }
+            }
+        };
         const DEFAULT_TYPOGRAPHY_CONFIG = { fontFamily: '"Noto Serif SC", STSong, "Times New Roman", serif', fontSize: 17, lineHeight: 1.9, paddingX: 6, theme: 'light' };
         const LOCAL_STORAGE_KEY = 'yang-reader-state-v1';
+        const API_KEY_SESSION_STORAGE_KEY = 'yang-reader-api-key-v1';
+        const API_KEY_LOCAL_STORAGE_KEY = 'yang-reader-api-key-v1';
+        const READER_DB_NAME = 'yang-reader-local-v1';
+        const READER_DB_VERSION = 1;
+        const CACHE_PROMPT_VERSION = '2026-07-26-v1';
+
+        const openReaderDb = () => new Promise((resolve) => {
+            if (!window.indexedDB) { resolve(null); return; }
+            const request = window.indexedDB.open(READER_DB_NAME, READER_DB_VERSION);
+            request.onupgradeneeded = () => {
+                const db = request.result;
+                if (!db.objectStoreNames.contains('ai-cache')) db.createObjectStore('ai-cache', { keyPath: 'key' });
+                if (!db.objectStoreNames.contains('tts-cache')) db.createObjectStore('tts-cache', { keyPath: 'key' });
+                if (!db.objectStoreNames.contains('pdf-tasks')) db.createObjectStore('pdf-tasks', { keyPath: 'key' });
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => resolve(null);
+        });
+
+        const readReaderStore = async (storeName, key) => {
+            const db = await openReaderDb();
+            if (!db) return null;
+            return new Promise(resolve => {
+                const request = db.transaction(storeName, 'readonly').objectStore(storeName).get(key);
+                request.onsuccess = () => resolve(request.result || null);
+                request.onerror = () => resolve(null);
+            });
+        };
+
+        const writeReaderStore = async (storeName, value) => {
+            const db = await openReaderDb();
+            if (!db) return false;
+            return new Promise(resolve => {
+                const request = db.transaction(storeName, 'readwrite').objectStore(storeName).put(value);
+                request.onsuccess = () => resolve(true);
+                request.onerror = () => resolve(false);
+            });
+        };
+
+        const hashText = async (value) => {
+            const bytes = new TextEncoder().encode(value);
+            if (window.crypto?.subtle) {
+                const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+                return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+            }
+            return btoa(unescape(encodeURIComponent(value))).slice(0, 64);
+        };
+
+        const hashBytes = async (bytes) => {
+            if (window.crypto?.subtle) {
+                const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+                return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+            }
+            return hashText(String(bytes.byteLength));
+        };
+
+        const buildCacheKey = async (kind, input, config = {}, options = {}) => {
+            const identity = JSON.stringify({ kind, input, model: config.model || '', apiType: config.apiType || '', baseUrl: config.baseUrl || '', promptVersion: CACHE_PROMPT_VERSION, options });
+            return `${kind}:${await hashText(identity)}`;
+        };
+
+        const getStoredApiKey = (legacyKey = '') => {
+            try {
+                const sessionKey = window.sessionStorage.getItem(API_KEY_SESSION_STORAGE_KEY);
+                if (sessionKey) return sessionKey;
+                const rememberedKey = window.localStorage.getItem(API_KEY_LOCAL_STORAGE_KEY);
+                if (rememberedKey) return rememberedKey;
+                if (legacyKey) {
+                    window.sessionStorage.setItem(API_KEY_SESSION_STORAGE_KEY, legacyKey);
+                    try {
+                        const state = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) || '{}') || {};
+                        if (state.apiConfig?.key) {
+                            const { key, ...safeApiConfig } = state.apiConfig;
+                            state.apiConfig = safeApiConfig;
+                            window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+                        }
+                    } catch (error) { console.warn('Legacy API Key cleanup failed'); }
+                    return legacyKey;
+                }
+            } catch (error) { console.warn('API Key restore failed'); }
+            return '';
+        };
+
+        const sanitizeApiConfig = (config = {}) => {
+            const { key, ...safeConfig } = config;
+            return { ...safeConfig, key: '' };
+        };
+
+        const persistApiKey = (config = {}) => {
+            try {
+                const key = String(config.key || '').trim();
+                if (key) window.sessionStorage.setItem(API_KEY_SESSION_STORAGE_KEY, key);
+                else window.sessionStorage.removeItem(API_KEY_SESSION_STORAGE_KEY);
+                if (config.rememberKey && key) window.localStorage.setItem(API_KEY_LOCAL_STORAGE_KEY, key);
+                else window.localStorage.removeItem(API_KEY_LOCAL_STORAGE_KEY);
+            } catch (error) { console.warn('API Key save failed'); }
+        };
+
+        const resolveTaskApiConfig = (config = {}, task = 'analysis') => {
+            const route = config.taskRoutes?.[task] || {};
+            return normalizeApiConfig({ ...config, ...route, key: getStoredApiKey(config.key) });
+        };
         const formatFileSize = (bytes) => {
             if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
             return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -1391,6 +1541,22 @@ ${JSON.stringify(miniCorpus, null, 2)}
             return normalized.slice(0, Math.max(1, cutAt)).trim();
         };
 
+        const splitTextIntoChunks = (text, maxChars = 12000) => {
+            const normalized = String(text || '').trim();
+            if (!normalized) return [];
+            const chunks = [];
+            let remaining = normalized;
+            while (remaining.length > maxChars) {
+                const boundary = Math.max(remaining.lastIndexOf('\n\n', maxChars), remaining.lastIndexOf('. ', maxChars));
+                const cutAt = boundary > maxChars * 0.55 ? boundary + (remaining[boundary] === '.' ? 1 : 0) : remaining.lastIndexOf(' ', maxChars);
+                const safeCut = cutAt > 0 ? cutAt : maxChars;
+                chunks.push(remaining.slice(0, safeCut).trim());
+                remaining = remaining.slice(safeCut).trim();
+            }
+            if (remaining) chunks.push(remaining);
+            return chunks;
+        };
+
         const App = () => {
             const localState = useMemo(() => {
                 try {
@@ -1405,7 +1571,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const persistLocalState = (patch) => {
                 try {
                     const previous = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) || '{}') || {};
-                    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ ...previous, ...patch }));
+                    const safePatch = patch.apiConfig ? { ...patch, apiConfig: sanitizeApiConfig(patch.apiConfig) } : patch;
+                    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify({ ...previous, ...safePatch }));
                 } catch (error) {
                     console.warn('Local state save failed:', error);
                 }
@@ -1418,7 +1585,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 lineHeight: savedTypographyConfig.lineHeight === 2.4 ? DEFAULT_TYPOGRAPHY_CONFIG.lineHeight : (savedTypographyConfig.lineHeight ?? DEFAULT_TYPOGRAPHY_CONFIG.lineHeight)
             };
 
-            const initialApiConfig = normalizeApiConfig({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}) });
+            const initialApiConfig = normalizeApiConfig({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}), key: getStoredApiKey(localState.apiConfig?.key) });
             const [apiConfig, setApiConfig] = useState(initialApiConfig);
             const [isApiModalOpen, setIsApiModalOpen] = useState(false);
             const [tempApiConfig, setTempApiConfig] = useState(initialApiConfig);
@@ -1548,7 +1715,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 const unsubApi = onSnapshot(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'apiConfig'), 
                     (docSnap) => {
                         if (docSnap.exists()) {
-                            const data = normalizeApiConfig({ ...DEFAULT_API_CONFIG, ...docSnap.data() });
+                            const data = normalizeApiConfig({ ...DEFAULT_API_CONFIG, ...docSnap.data(), key: getStoredApiKey() });
                             setApiConfig(data);
                             setTempApiConfig(data);
                             persistLocalState({ apiConfig: data });
@@ -1588,6 +1755,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
             const handleSaveApiConfig = async () => {
                 const normalizedConfig = normalizeApiConfig(tempApiConfig);
+                persistApiKey(normalizedConfig);
                 setApiConfig(normalizedConfig);
                 setTempApiConfig(normalizedConfig);
                 persistLocalState({ apiConfig: normalizedConfig });
@@ -1596,7 +1764,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     const { doc, setDoc } = window.firebaseImports;
                     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
                     try {
-                        await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'apiConfig'), normalizedConfig, { merge: true });
+                        await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'apiConfig'), sanitizeApiConfig(normalizedConfig), { merge: true });
                         window.showToast("API 配置已更新并同步至云端", "success");
                     } catch(e) { window.showToast("同步配置失败", "error"); }
                 } else {
@@ -1673,13 +1841,19 @@ ${JSON.stringify(miniCorpus, null, 2)}
             };
 
             const fetchFullTranslation = async (text, recordId) => {
-                if (text.length > 40000) {
+                if (text.length > 120000) {
                     window.showToast("整本文本过长，已跳过一次性全文翻译；可按段展开精翻", "warning");
                     return;
                 }
                 setIsFullTransLoading(true);
                 try {
-                    const res = await callGeminiFullTranslation(text, apiConfig);
+                    const chunks = splitTextIntoChunks(text, 12000);
+                    const translatedChunks = [];
+                    for (let i = 0; i < chunks.length; i++) {
+                        window.showToast(`正在处理全文翻译 ${i + 1}/${chunks.length}`, 'info');
+                        translatedChunks.push(await callGeminiFullTranslation(chunks[i], apiConfig));
+                    }
+                    const res = translatedChunks.filter(Boolean).join('\n\n');
                     if (res) {
                         const transArray = res.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
                         setFullTranslations(transArray);
@@ -1782,8 +1956,12 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     pdfDocument = await loadingTask.promise;
                     setPdfExtractionProgress({ current: 0, total: pdfDocument.numPages });
 
-                    const extractedParagraphs = [];
-                    for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
+                    const taskKey = `pdf:${await hashText(`${file.name}:${file.size}:${file.lastModified}`)}`;
+                    const savedTask = await readReaderStore('pdf-tasks', taskKey);
+                    const extractedParagraphs = savedTask?.paragraphs || [];
+                    const completedPages = Math.min(savedTask?.completedPages || 0, pdfDocument.numPages);
+                    if (completedPages > 0) setPdfExtractionProgress({ current: completedPages, total: pdfDocument.numPages });
+                    for (let pageNumber = completedPages + 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
                         const page = await pdfDocument.getPage(pageNumber);
                         const viewport = page.getViewport({ scale: 1 });
                         const textContent = await page.getTextContent();
@@ -1791,6 +1969,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         const pageParagraphs = pdfLinesToParagraphs(lines, viewport.width);
                         extractedParagraphs.push(...pageParagraphs);
                         page.cleanup();
+                        await writeReaderStore('pdf-tasks', { key: taskKey, fileName: file.name, totalPages: pdfDocument.numPages, completedPages: pageNumber, paragraphs: extractedParagraphs, updatedAt: Date.now() });
 
                         setPdfExtractionProgress({ current: pageNumber, total: pdfDocument.numPages });
                         if (pageNumber % 3 === 0) await new Promise(resolve => setTimeout(resolve, 0));
@@ -1832,12 +2011,22 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 let combinedText = "";
                 try {
                     for (let i = 0; i < files.length; i++) {
+                        const fileBytes = new Uint8Array(await files[i].arrayBuffer());
+                        const fileHash = await hashBytes(fileBytes);
+                        const mediaCacheKey = `media:${fileHash}`;
+                        const cachedMedia = await readReaderStore('ai-cache', mediaCacheKey);
+                        if (cachedMedia?.value) {
+                            combinedText += (combinedText ? '\n\n' : '') + cachedMedia.value;
+                            continue;
+                        }
                         const base64Data = await new Promise((res) => {
                             const reader = new FileReader();
                             reader.onloadend = () => res(reader.result.split(',')[1]);
                             reader.readAsDataURL(files[i]);
                         });
-                        combinedText += (combinedText ? '\n\n' : '') + await extractTextFromMedia(base64Data, files[i].type, apiConfig);
+                        const extractedMediaText = await extractTextFromMedia(base64Data, files[i].type, apiConfig);
+                        await writeReaderStore('ai-cache', { key: mediaCacheKey, value: extractedMediaText, createdAt: Date.now(), task: 'ocr' });
+                        combinedText += (combinedText ? '\n\n' : '') + extractedMediaText;
                     }
                     setInputText(prev => prev + (prev ? '\n\n' : '') + combinedText);
                     window.showToast("文件提取成功！请点击进入精读以保存记录", "success");
@@ -2173,6 +2362,22 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 value={tempApiConfig.key}
                                                 onChange={e => setTempApiConfig({...tempApiConfig, key: e.target.value})}
                                             />
+                                            <label className="mt-2 flex items-center gap-2 text-[12px] text-gray-600 dark:text-gray-300">
+                                                <input type="checkbox" checked={Boolean(tempApiConfig.rememberKey)} onChange={e => setTempApiConfig({...tempApiConfig, rememberKey: e.target.checked})} />
+                                                在此设备记住 Key（公共电脑请勿勾选）
+                                            </label>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            {[
+                                                ['analysis', '内容解析'],
+                                                ['ocr', 'OCR'],
+                                                ['tts', 'TTS']
+                                            ].map(([task, label]) => (
+                                                <label key={task} className="block text-[12px] text-gray-600 dark:text-gray-300">
+                                                    <span className="block mb-1">{label} Model</span>
+                                                    <input type="text" className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[12px] outline-none focus:border-purple-400 text-gray-800 dark:text-gray-200" value={tempApiConfig.taskRoutes?.[task]?.model || tempApiConfig.model || ''} onChange={e => setTempApiConfig({...tempApiConfig, taskRoutes: {...(tempApiConfig.taskRoutes || {}), [task]: {...(tempApiConfig.taskRoutes?.[task] || {}), model: e.target.value}}})} />
+                                                </label>
+                                            ))}
                                         </div>
                                     </div>
                                     <div className="flex justify-end gap-2 mt-6">
