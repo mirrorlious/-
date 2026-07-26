@@ -1,0 +1,4 @@
+exit_code=1
+commit=c7da83485d9c63184cd86ec360ed5cefd3dc5ce5
+---- output ----
+Missing four-improvement markers: ["structureViewMode === 'tree' ? 'mindmap' : 'tree'"]
