@@ -126,8 +126,8 @@
         }
 
         .reader-annotation-mark {
-            background: rgba(250, 204, 21, 0.16);
-            border-bottom: 2px solid rgba(202, 138, 4, 0.62);
+            background: var(--annotation-bg, rgba(180, 130, 15, 0.26));
+            border-bottom: 2px solid var(--annotation-border, #8a6508);
             color: inherit;
             border-radius: 2px;
             padding-inline: 1px;
@@ -139,26 +139,56 @@
 
         .reader-annotation-mark:hover,
         .reader-annotation-mark:focus-visible {
-            background: rgba(250, 204, 21, 0.28);
-            border-bottom-color: rgba(161, 98, 7, 0.9);
+            background: var(--annotation-hover, rgba(180, 130, 15, 0.38));
+            border-bottom-color: var(--annotation-strong, #6f4f05);
             outline: none;
         }
 
         .reader-annotation-mark-active {
-            background: rgba(250, 204, 21, 0.38);
-            border-bottom-color: #ca8a04;
-            box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.16);
+            background: var(--annotation-active, rgba(180, 130, 15, 0.48));
+            border-bottom-color: var(--annotation-strong, #6f4f05);
+            box-shadow: 0 0 0 3px var(--annotation-ring, rgba(138, 101, 8, 0.16));
         }
 
         .dark .reader-annotation-mark {
-            background: rgba(202, 138, 4, 0.2);
-            border-bottom-color: rgba(250, 204, 21, 0.6);
+            background: var(--annotation-dark-bg, rgba(202, 138, 4, 0.28));
+            border-bottom-color: var(--annotation-dark-border, #facc15);
         }
 
         .dark .reader-annotation-mark-active {
-            background: rgba(202, 138, 4, 0.34);
-            border-bottom-color: #fde047;
-            box-shadow: 0 0 0 3px rgba(202, 138, 4, 0.2);
+            background: var(--annotation-dark-active, rgba(202, 138, 4, 0.46));
+            border-bottom-color: var(--annotation-dark-border, #fde047);
+            box-shadow: 0 0 0 3px var(--annotation-dark-ring, rgba(202, 138, 4, 0.22));
+        }
+
+        .reader-theme-root:not(.dark) .bg-gray-900,
+        .reader-theme-root:not(.dark) .bg-black {
+            background-color: #486f8f !important;
+        }
+
+        .reader-theme-root:not(.dark) .border-gray-900,
+        .reader-theme-root:not(.dark) .border-black {
+            border-color: #91a9bb !important;
+        }
+
+        .reader-theme-root:not(.dark) .bg-slate-900 {
+            background-color: #eef4f7 !important;
+        }
+
+        .reader-theme-root:not(.dark) .bg-slate-900 .text-slate-300 {
+            color: #425c6c !important;
+        }
+
+        .reader-theme-root:not(.dark) .bg-slate-900 .text-amber-400 {
+            color: #8a6508 !important;
+        }
+
+        .reader-article-toolbar {
+            width: 100%;
+        }
+
+        .reader-tree-node {
+            width: 100%;
         }
 
         .reader-context-menu {
@@ -706,7 +736,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
         // ==========================================
         // 3. UI 子组件
         // ==========================================
-        const LogicTreeNode = ({ node, isRoot = false, displayMode, nodePath = 'root', collapsedNodes, onToggle }) => {
+        const LogicTreeNode = ({ node, isRoot = false, displayMode, nodePath = 'root', collapsedNodes, onToggle, isEditing = false, onUpdateNode, onAddChild, onDeleteNode }) => {
             if (!node) return null;
             const hasChildren = Array.isArray(node.children) && node.children.length > 0;
             const isCollapsed = hasChildren && collapsedNodes?.has(nodePath);
@@ -726,32 +756,53 @@ ${JSON.stringify(miniCorpus, null, 2)}
             };
 
             return (
-                <div className="relative">
-                    <div className={`flex items-stretch border transition-colors ${isRoot ? 'bg-gray-900 dark:bg-black border-gray-900 dark:border-gray-700' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500'}`}>
+                <div className="relative w-full">
+                    <div className={`reader-tree-node flex items-stretch border transition-colors ${isRoot ? 'bg-sky-700 dark:bg-sky-950 border-sky-700 dark:border-sky-800' : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 hover:border-sky-300 dark:hover:border-sky-700'}`}>
+                        <div className="min-w-0 flex-1 px-3 py-2.5">
+                            {isEditing ? (
+                                <div className="space-y-2">
+                                    <input
+                                        value={node.nameEn || ''}
+                                        onChange={(event) => onUpdateNode?.(nodePath, { nameEn: event.target.value })}
+                                        className={`w-full px-2 py-1.5 text-[13px] border rounded-sm outline-none ${isRoot ? 'bg-white/95 text-slate-800 border-white/40' : 'bg-white dark:bg-gray-900 text-slate-800 dark:text-gray-100 border-slate-200 dark:border-gray-600'}`}
+                                        placeholder="English title"
+                                    />
+                                    <input
+                                        value={node.nameZh || ''}
+                                        onChange={(event) => onUpdateNode?.(nodePath, { nameZh: event.target.value })}
+                                        className={`w-full px-2 py-1.5 text-[12px] border rounded-sm outline-none ${isRoot ? 'bg-white/95 text-slate-700 border-white/40' : 'bg-white dark:bg-gray-900 text-slate-700 dark:text-gray-200 border-slate-200 dark:border-gray-600'}`}
+                                        placeholder="中文标题"
+                                    />
+                                </div>
+                            ) : renderText()}
+                        </div>
+                        {isEditing && (
+                            <div className="shrink-0 flex items-center gap-1 px-1.5">
+                                <button type="button" onClick={(event) => { event.stopPropagation(); onAddChild?.(nodePath); }} className={`w-8 h-8 grid place-items-center rounded-sm ${isRoot ? 'text-white hover:bg-white/15' : 'text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30'}`} title="新增子节点" aria-label="新增子节点">+</button>
+                                {!isRoot && <button type="button" onClick={(event) => { event.stopPropagation(); onDeleteNode?.(nodePath); }} className="w-8 h-8 grid place-items-center rounded-sm text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20" title="删除节点" aria-label="删除节点">×</button>}
+                            </div>
+                        )}
+                        {hasChildren && (
+                            <div className={`shrink-0 self-center px-1.5 py-0.5 text-[10px] font-medium border ${isRoot ? 'border-sky-300/60 text-sky-100' : 'border-slate-200 dark:border-gray-600 text-slate-400'}`}>
+                                {node.children.length}
+                            </div>
+                        )}
                         {hasChildren ? (
                             <button
                                 type="button"
                                 onClick={(event) => { event.stopPropagation(); onToggle?.(nodePath); }}
-                                className={`w-10 shrink-0 grid place-items-center border-r transition-colors ${isRoot ? 'border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white' : 'border-gray-100 dark:border-gray-700 text-gray-400 hover:bg-gray-50 hover:text-gray-900 dark:hover:bg-gray-700 dark:hover:text-white'}`}
+                                className={`w-10 shrink-0 grid place-items-center border-l transition-colors ${isRoot ? 'border-sky-600 text-sky-100 hover:bg-sky-600 hover:text-white' : 'border-slate-100 dark:border-gray-700 text-slate-400 hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-gray-700 dark:hover:text-white'}`}
                                 aria-label={`${isCollapsed ? '展开' : '收起'}分支：${nodeLabel}`}
                                 aria-expanded={!isCollapsed}
                                 title={isCollapsed ? '展开分支' : '收起分支'}
                             >
-                                <svg className={`w-4 h-4 transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 9l6 6 6-6"></path>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={isCollapsed ? "M6 9l6 6 6-6" : "M6 15l6-6 6 6"}></path>
                                 </svg>
                             </button>
                         ) : (
-                            <div className={`w-10 shrink-0 grid place-items-center border-r ${isRoot ? 'border-gray-700' : 'border-gray-100 dark:border-gray-700'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${isRoot ? 'bg-gray-400' : 'bg-gray-300 dark:bg-gray-600'}`}></span>
-                            </div>
-                        )}
-                        <div className="min-w-0 flex-1 px-3 py-2.5">
-                            {renderText()}
-                        </div>
-                        {hasChildren && (
-                            <div className={`shrink-0 self-center mr-3 px-1.5 py-0.5 text-[10px] font-medium border ${isRoot ? 'border-gray-700 text-gray-300' : 'border-gray-200 dark:border-gray-600 text-gray-400'}`}>
-                                {node.children.length}
+                            <div className={`w-10 shrink-0 grid place-items-center border-l ${isRoot ? 'border-sky-600' : 'border-slate-100 dark:border-gray-700'}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isRoot ? 'bg-sky-200' : 'bg-slate-300 dark:bg-gray-600'}`}></span>
                             </div>
                         )}
                     </div>
@@ -767,6 +818,10 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                         nodePath={`${nodePath}.${idx}`}
                                         collapsedNodes={collapsedNodes}
                                         onToggle={onToggle}
+                                        isEditing={isEditing}
+                                        onUpdateNode={onUpdateNode}
+                                        onAddChild={onAddChild}
+                                        onDeleteNode={onDeleteNode}
                                     />
                                 </div>
                             ))}
@@ -782,6 +837,35 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 nodePath,
                 ...node.children.flatMap((child, index) => getMindMapBranchPaths(child, `${nodePath}.${index}`))
             ];
+        };
+
+        const cloneJson = (value) => JSON.parse(JSON.stringify(value));
+
+        const updateMindMapNodeAtPath = (mindmap, nodePath, updater) => {
+            const path = nodePath === 'root' ? [] : nodePath.split('.').slice(1).map(Number);
+            const next = cloneJson(mindmap);
+            let current = next;
+            for (const index of path) {
+                if (!current.children?.[index]) return next;
+                current = current.children[index];
+            }
+            const updated = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
+            Object.assign(current, updated);
+            return next;
+        };
+
+        const removeMindMapNodeAtPath = (mindmap, nodePath) => {
+            if (nodePath === 'root') return mindmap;
+            const path = nodePath.split('.').slice(1).map(Number);
+            const childIndex = path.pop();
+            const next = cloneJson(mindmap);
+            let parent = next;
+            for (const index of path) {
+                if (!parent.children?.[index]) return next;
+                parent = parent.children[index];
+            }
+            if (Array.isArray(parent.children)) parent.children.splice(childIndex, 1);
+            return next;
         };
 
         const MINDMAP_PREVIEW_DATA = {
@@ -883,9 +967,9 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                         <p className="text-[12px] text-emerald-700 dark:text-emerald-400 leading-relaxed border-t border-emerald-100 dark:border-emerald-900/50 pt-2">{realExamMatch?.translation}</p>
                                     </div>
                                 </div>
-                                <div className="bg-slate-900 dark:bg-gray-900 p-4 rounded-xl shadow-inner">
+                                <div className="bg-amber-50 dark:bg-gray-900 p-4 rounded-xl border border-amber-200 dark:border-gray-700">
                                     <div className="flex items-center space-x-2 mb-2"><svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg><span className="text-[13px] font-bold text-amber-400 tracking-wider">写作提炼法则</span></div>
-                                    <div className="text-[13px] text-slate-300 dark:text-gray-300 leading-relaxed text-justify">{writingTip}</div>
+                                    <div className="text-[13px] text-slate-700 dark:text-gray-300 leading-relaxed text-justify">{writingTip}</div>
                                 </div>
                             </div>
                         );
@@ -896,6 +980,30 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
         const escapeRegExp = (string) => {
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        };
+
+        const ANNOTATION_COLOR_MAP = {
+            gold: { label: '深金', bg: 'rgba(166, 118, 10, 0.28)', hover: 'rgba(166, 118, 10, 0.40)', active: 'rgba(166, 118, 10, 0.52)', border: '#846008', strong: '#634705', ring: 'rgba(132, 96, 8, 0.18)', darkBg: 'rgba(202, 138, 4, 0.30)', darkActive: 'rgba(202, 138, 4, 0.48)', darkBorder: '#facc15', darkRing: 'rgba(202, 138, 4, 0.22)' },
+            blue: { label: '蓝', bg: 'rgba(56, 132, 196, 0.20)', hover: 'rgba(56, 132, 196, 0.32)', active: 'rgba(56, 132, 196, 0.42)', border: '#2f76ad', strong: '#235c89', ring: 'rgba(47, 118, 173, 0.16)', darkBg: 'rgba(56, 132, 196, 0.28)', darkActive: 'rgba(56, 132, 196, 0.44)', darkBorder: '#7dd3fc', darkRing: 'rgba(56, 189, 248, 0.18)' },
+            rose: { label: '玫红', bg: 'rgba(190, 75, 105, 0.18)', hover: 'rgba(190, 75, 105, 0.30)', active: 'rgba(190, 75, 105, 0.40)', border: '#b44b68', strong: '#8d3851', ring: 'rgba(180, 75, 104, 0.16)', darkBg: 'rgba(190, 75, 105, 0.28)', darkActive: 'rgba(190, 75, 105, 0.44)', darkBorder: '#fda4af', darkRing: 'rgba(251, 113, 133, 0.18)' },
+            green: { label: '绿', bg: 'rgba(49, 139, 107, 0.18)', hover: 'rgba(49, 139, 107, 0.30)', active: 'rgba(49, 139, 107, 0.40)', border: '#2f8064', strong: '#23604b', ring: 'rgba(47, 128, 100, 0.16)', darkBg: 'rgba(49, 139, 107, 0.28)', darkActive: 'rgba(49, 139, 107, 0.44)', darkBorder: '#6ee7b7', darkRing: 'rgba(52, 211, 153, 0.18)' },
+            violet: { label: '紫', bg: 'rgba(124, 91, 190, 0.18)', hover: 'rgba(124, 91, 190, 0.30)', active: 'rgba(124, 91, 190, 0.40)', border: '#7352b0', strong: '#583d89', ring: 'rgba(115, 82, 176, 0.16)', darkBg: 'rgba(124, 91, 190, 0.28)', darkActive: 'rgba(124, 91, 190, 0.44)', darkBorder: '#c4b5fd', darkRing: 'rgba(167, 139, 250, 0.18)' }
+        };
+
+        const annotationCssVariables = (colorKey) => {
+            const palette = ANNOTATION_COLOR_MAP[colorKey] || ANNOTATION_COLOR_MAP.gold;
+            return {
+                '--annotation-bg': palette.bg,
+                '--annotation-hover': palette.hover,
+                '--annotation-active': palette.active,
+                '--annotation-border': palette.border,
+                '--annotation-strong': palette.strong,
+                '--annotation-ring': palette.ring,
+                '--annotation-dark-bg': palette.darkBg,
+                '--annotation-dark-active': palette.darkActive,
+                '--annotation-dark-border': palette.darkBorder,
+                '--annotation-dark-ring': palette.darkRing
+            };
         };
 
         const splitTextByAnnotations = (segmentText, segmentStart, annotations) => {
@@ -1353,6 +1461,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                     const content = renderProcessedText(piece.text, seg.isTarget);
                                     if (!piece.annotationIds.length) return <Fragment key={pieceIndex}>{content}</Fragment>;
                                     const primaryAnnotationId = piece.annotationIds[0];
+                                    const primaryAnnotation = annotations.find(item => item.id === primaryAnnotationId);
                                     const isActiveAnnotation = piece.annotationIds.includes(activeAnnotationId);
                                     return (
                                         <mark
@@ -1360,6 +1469,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                             tabIndex="0"
                                             data-annotation-id={primaryAnnotationId}
                                             className={`reader-annotation-mark ${isActiveAnnotation ? 'reader-annotation-mark-active' : ''}`}
+                                            style={annotationCssVariables(primaryAnnotation?.color || 'gold')}
                                             title={`${piece.annotationIds.length} 条批注`}
                                             onClick={(event) => { event.stopPropagation(); onFocusAnnotation?.(primaryAnnotationId); }}
                                             onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onFocusAnnotation?.(primaryAnnotationId); } }}
@@ -1373,7 +1483,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     </div>
 
                     {selectedText && (
-                        <div role="toolbar" aria-label="文字选区操作" onMouseDown={(event) => event.preventDefault()} className="absolute left-0 right-0 top-full z-30 mt-2 flex flex-wrap items-center gap-1.5 p-2 bg-gray-900 text-white rounded-sm shadow-lg animate-fade-in">
+                        <div role="toolbar" aria-label="文字选区操作" onMouseDown={(event) => event.preventDefault()} className="absolute left-0 right-0 top-full z-30 mt-2 flex flex-wrap items-center gap-1.5 p-2 bg-sky-700 text-white rounded-sm shadow-lg animate-fade-in">
                             <span className="px-2 text-[11px] text-gray-300 truncate max-w-[180px]" title={selectedText}>{selectedText}</span>
                             <button onClick={() => navigator.clipboard?.writeText(selectedText)} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20">复制</button>
                             <button onClick={handleSelectionTranslation} disabled={isSelectionTranslating} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20 disabled:opacity-50">{isSelectionTranslating ? '翻译中…' : '翻译'}</button>
@@ -1399,11 +1509,11 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         <button
                             onClick={(e) => { e.stopPropagation(); setIsInteracting(true); }}
                             aria-expanded={showActions}
-                            className="mt-2 inline-flex items-center gap-1.5 min-h-[36px] px-2 text-[12px] font-medium text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors md:opacity-0 md:group-hover:opacity-100 focus:opacity-100"
+                            className="mt-2 ml-auto w-fit flex items-center gap-1.5 min-h-[36px] px-2 text-[12px] font-medium text-slate-400 hover:text-sky-700 dark:hover:text-sky-300 transition-colors md:opacity-0 md:group-hover:opacity-100 focus:opacity-100"
                             aria-label="展开本段阅读工具"
                         >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v12m6-6H6"></path></svg>
-                            <span>分析本段</span>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 15l6-6 6 6"></path></svg>
+                            <span>展开本段工具</span>
                         </button>
                     )}
 
@@ -1429,7 +1539,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         </div>
                     )}
 
-                    <div role="menu" aria-label="Paragraph actions" className={`flex flex-wrap items-center gap-2 transition-all duration-300 ease-in-out overflow-hidden origin-top ${showActions ? 'max-h-[150px] opacity-100 mt-4 scale-y-100' : 'max-h-0 opacity-0 mt-0 scale-y-95 pointer-events-none'}`}>
+                    <div role="menu" aria-label="Paragraph actions" className={`w-full flex flex-wrap items-center justify-end gap-2 transition-all duration-300 ease-in-out overflow-hidden origin-top ${showActions ? 'max-h-[150px] opacity-100 mt-4 scale-y-100' : 'max-h-0 opacity-0 mt-0 scale-y-95 pointer-events-none'}`}>
                         <button 
                             onClick={handleToggleTrans} 
                             disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow} 
@@ -1700,7 +1810,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
         const API_KEY_SESSION_STORAGE_KEY = 'yang-reader-api-key-v1';
         const API_KEY_LOCAL_STORAGE_KEY = 'yang-reader-api-key-v1';
         const READER_DB_NAME = 'yang-reader-local-v1';
-        const READER_DB_VERSION = 1;
+        const READER_DB_VERSION = 2;
         const CACHE_PROMPT_VERSION = '2026-07-26-v1';
 
         const openReaderDb = () => new Promise((resolve) => {
@@ -1711,6 +1821,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 if (!db.objectStoreNames.contains('ai-cache')) db.createObjectStore('ai-cache', { keyPath: 'key' });
                 if (!db.objectStoreNames.contains('tts-cache')) db.createObjectStore('tts-cache', { keyPath: 'key' });
                 if (!db.objectStoreNames.contains('pdf-tasks')) db.createObjectStore('pdf-tasks', { keyPath: 'key' });
+                if (!db.objectStoreNames.contains('book-imports')) db.createObjectStore('book-imports', { keyPath: 'key' });
+                if (!db.objectStoreNames.contains('book-articles')) db.createObjectStore('book-articles', { keyPath: 'key' });
             };
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => resolve(null);
@@ -1939,6 +2051,120 @@ ${JSON.stringify(miniCorpus, null, 2)}
             return chunks;
         };
 
+        const normalizeBookText = (text) => String(text || '')
+            .replace(/\u00ad/g, '')
+            .replace(/[ \t]+/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+
+        const isLikelyContentsPage = (text) => {
+            const normalized = normalizeBookText(text);
+            const lines = normalized.split('\n').filter(Boolean);
+            const dottedOrNumbered = lines.filter(line => /\.{3,}\s*\d+$/.test(line) || /.+\s+\d{1,4}$/.test(line)).length;
+            return /\b(table of contents|contents)\b/i.test(normalized) || /目录|目\s*录/.test(normalized) || (lines.length >= 6 && dottedOrNumbered / lines.length > 0.45);
+        };
+
+        const isLikelyCoverOrNoisePage = (text) => {
+            const normalized = normalizeBookText(text);
+            const words = normalized.match(/[A-Za-z\u4e00-\u9fff]+/g) || [];
+            const letters = (normalized.match(/[A-Za-z\u4e00-\u9fff]/g) || []).length;
+            const digits = (normalized.match(/\d/g) || []).length;
+            return words.length < 18 || letters < 60 || (digits > letters * 0.75 && words.length < 80);
+        };
+
+        const getHeadingCandidate = (text) => {
+            const lines = normalizeBookText(text).split(/\n+/).map(line => line.trim()).filter(Boolean);
+            for (const line of lines.slice(0, 8)) {
+                const words = line.split(/\s+/).filter(Boolean);
+                if (words.length < 2 || words.length > 18 || line.length > 150) continue;
+                if (/[.!?;:]$/.test(line)) continue;
+                const alphaWords = words.filter(word => /[A-Za-z]/.test(word));
+                const titleCase = alphaWords.filter(word => /^[A-Z][A-Za-z'’-]*$/.test(word)).length;
+                if (/^(chapter|part|section|article)\b/i.test(line) || /^(第[一二三四五六七八九十百\d]+[章节篇部])/.test(line) || (alphaWords.length >= 2 && titleCase / alphaWords.length >= 0.55)) return line;
+            }
+            return '';
+        };
+
+        const segmentBookPages = (pages = []) => {
+            const ignored = [];
+            const useful = [];
+            pages.forEach(page => {
+                const text = normalizeBookText(page.text);
+                if (isLikelyContentsPage(text)) ignored.push({ ...page, reason: '目录页' });
+                else if (isLikelyCoverOrNoisePage(text)) ignored.push({ ...page, reason: '封面、插图或低信息页' });
+                else useful.push({ ...page, text, heading: getHeadingCandidate(text) });
+            });
+
+            const articles = [];
+            let current = null;
+            const flush = () => {
+                if (!current) return;
+                const text = normalizeBookText(current.pages.map(page => page.text).join('\n\n'));
+                const wordCount = (text.match(/[A-Za-z]+(?:['’-][A-Za-z]+)?|\p{Script=Han}/gu) || []).length;
+                if (wordCount >= 80) {
+                    articles.push({
+                        id: `article-${articles.length + 1}`,
+                        title: current.title || `未命名文章 ${articles.length + 1}`,
+                        pageStart: current.pages[0].pageNumber,
+                        pageEnd: current.pages[current.pages.length - 1].pageNumber,
+                        text,
+                        wordCount,
+                        selected: true
+                    });
+                }
+                current = null;
+            };
+
+            useful.forEach(page => {
+                const currentWords = current ? current.pages.reduce((sum, item) => sum + (item.text.match(/\S+/g) || []).length, 0) : 0;
+                const startsNew = Boolean(page.heading) && current && currentWords >= 220;
+                if (startsNew) flush();
+                if (!current) current = { title: page.heading || '', pages: [] };
+                if (!current.title && page.heading) current.title = page.heading;
+                current.pages.push(page);
+            });
+            flush();
+
+            if (articles.length === 1 && articles[0].wordCount > 4500) {
+                const source = articles[0];
+                const blocks = source.text.split(/\n{2,}/);
+                const splitArticles = [];
+                let buffer = [];
+                let title = source.title;
+                const pushBuffer = () => {
+                    const body = normalizeBookText(buffer.join('\n\n'));
+                    const count = (body.match(/[A-Za-z]+(?:['’-][A-Za-z]+)?|\p{Script=Han}/gu) || []).length;
+                    if (count >= 180) splitArticles.push({ title, text: body, wordCount: count });
+                    buffer = [];
+                };
+                blocks.forEach(block => {
+                    const heading = getHeadingCandidate(block);
+                    const currentCount = (buffer.join(' ').match(/\S+/g) || []).length;
+                    if (heading && currentCount >= 220) {
+                        pushBuffer();
+                        title = heading;
+                    }
+                    buffer.push(block);
+                });
+                pushBuffer();
+                if (splitArticles.length > 1) {
+                    return {
+                        ignored,
+                        articles: splitArticles.map((item, index) => ({
+                            id: `article-${index + 1}`,
+                            title: item.title || `未命名文章 ${index + 1}`,
+                            pageStart: source.pageStart,
+                            pageEnd: source.pageEnd,
+                            text: item.text,
+                            wordCount: item.wordCount,
+                            selected: true
+                        }))
+                    };
+                }
+            }
+            return { ignored, articles };
+        };
+
         const App = () => {
             const localState = useMemo(() => {
                 try {
@@ -1977,8 +2203,13 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [notesView, setNotesView] = useState('annotations');
             const [annotationComposer, setAnnotationComposer] = useState(null);
             const [annotationDraft, setAnnotationDraft] = useState("");
+            const [annotationColor, setAnnotationColor] = useState("gold");
             const [editingAnnotationId, setEditingAnnotationId] = useState(null);
             const [activeAnnotationId, setActiveAnnotationId] = useState(null);
+            const [bookImportSession, setBookImportSession] = useState(null);
+            const [isBookImportOpen, setIsBookImportOpen] = useState(false);
+            const [bookImportPreviewId, setBookImportPreviewId] = useState(null);
+            const [latestBookImportKey, setLatestBookImportKey] = useState(localState.latestBookImportKey || "");
             const [isImmersive, setIsImmersive] = useState(false);
             const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
 
@@ -2040,6 +2271,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [fullMapData, setFullMapData] = useState(isMindMapPreview ? MINDMAP_PREVIEW_DATA : null);
             const [mapMode, setMapMode] = useState('bilingual'); 
             const [isMapModalOpen, setIsMapModalOpen] = useState(false);
+            const [isMapEditing, setIsMapEditing] = useState(false);
+            const [mapEditDraft, setMapEditDraft] = useState(null);
             const [mapScale, setMapScale] = useState(1);
             const [collapsedMapNodes, setCollapsedMapNodes] = useState(() => new Set());
 
@@ -2262,6 +2495,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 if (!normalizedAnchor?.exact) return;
                 setAnnotationComposer({ anchor: normalizedAnchor });
                 setAnnotationDraft(existingAnnotation?.note || "");
+                setAnnotationColor(existingAnnotation?.color || "gold");
                 setEditingAnnotationId(existingAnnotation?.id || null);
                 setNotesView('annotations');
                 setRightPanelTab('notes');
@@ -2282,13 +2516,14 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     if (editingAnnotationId) {
                         const index = annotations.findIndex(item => item.id === editingAnnotationId);
                         if (index >= 0) {
-                            annotations[index] = { ...annotations[index], note, updatedAt: now };
+                            annotations[index] = { ...annotations[index], note, color: annotationColor || "gold", updatedAt: now };
                         }
                     } else {
                         annotations.unshift({
                             id: `annotation-${now}-${Math.random().toString(36).slice(2, 8)}`,
                             anchor: annotationComposer.anchor,
                             note,
+                            color: annotationColor || "gold",
                             createdAt: now,
                             updatedAt: now
                         });
@@ -2297,6 +2532,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 });
                 setAnnotationComposer(null);
                 setAnnotationDraft("");
+                setAnnotationColor("gold");
                 setEditingAnnotationId(null);
                 window.getSelection()?.removeAllRanges();
                 window.showToast(editingAnnotationId ? "批注已更新" : "批注已保存到当前设备", "success");
@@ -2312,6 +2548,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 if (editingAnnotationId === annotationId) {
                     setAnnotationComposer(null);
                     setAnnotationDraft("");
+                    setAnnotationColor("gold");
                     setEditingAnnotationId(null);
                 }
             };
@@ -2389,16 +2626,25 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 } finally { setIsFullTransLoading(false); }
             };
 
-            const loadHistoryRecord = (record) => {
-                setInputText(record.text);
+            const loadHistoryRecord = async (record) => {
+                let text = record.text || "";
+                if (!text && record.localArticleKey) {
+                    const stored = await readReaderStore('book-articles', record.localArticleKey);
+                    text = stored?.text || "";
+                }
+                if (!text) {
+                    window.showToast("这篇文章的本地正文已不存在", "warning");
+                    return;
+                }
+                setInputText(text);
                 setFullMapData(record.fullMapData);
                 setCollapsedMapNodes(new Set());
                 setFullTranslations(record.fullTranslations || []);
                 setCurrentHistoryId(record.id);
                 setIsReadingMode(true);
                 setIsHistoryDrawerOpen(false);
-                if (!record.fullTranslations || record.fullTranslations.length === 0) {
-                    fetchFullTranslation(record.text, record.id);
+                if (record.sourceType !== 'book-article' && (!record.fullTranslations || record.fullTranslations.length === 0)) {
+                    fetchFullTranslation(text, record.id);
                 }
             };
 
@@ -2480,7 +2726,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                     const taskKey = `pdf:${await hashText(`${file.name}:${file.size}:${file.lastModified}`)}`;
                     const savedTask = await readReaderStore('pdf-tasks', taskKey);
-                    const extractedParagraphs = savedTask?.paragraphs || [];
+                    const extractedPages = Array.isArray(savedTask?.pages) ? [...savedTask.pages] : [];
                     const completedPages = Math.min(savedTask?.completedPages || 0, pdfDocument.numPages);
                     if (completedPages > 0) setPdfExtractionProgress({ current: completedPages, total: pdfDocument.numPages });
                     for (let pageNumber = completedPages + 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
@@ -2489,26 +2735,42 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         const textContent = await page.getTextContent();
                         const lines = pdfItemsToLines(textContent.items, viewport.width);
                         const pageParagraphs = pdfLinesToParagraphs(lines, viewport.width);
-                        extractedParagraphs.push(...pageParagraphs);
+                        let pageText = pageParagraphs.join("\n\n").trim();
+                        let usedOcr = false;
+                        if (pageText.length < 80) {
+                            const ocrViewport = page.getViewport({ scale: 1.6 });
+                            const canvas = document.createElement('canvas');
+                            const context = canvas.getContext('2d', { alpha: false });
+                            canvas.width = Math.ceil(ocrViewport.width);
+                            canvas.height = Math.ceil(ocrViewport.height);
+                            await page.render({ canvasContext: context, viewport: ocrViewport }).promise;
+                            const imageData = canvas.toDataURL('image/jpeg', 0.86).split(',')[1];
+                            pageText = normalizeBookText(await extractTextFromMedia(imageData, 'image/jpeg', apiConfig));
+                            canvas.width = 1;
+                            canvas.height = 1;
+                            usedOcr = true;
+                        }
+                        extractedPages.push({ pageNumber, text: pageText, usedOcr });
                         page.cleanup();
-                        await writeReaderStore('pdf-tasks', { key: taskKey, fileName: file.name, totalPages: pdfDocument.numPages, completedPages: pageNumber, paragraphs: extractedParagraphs, updatedAt: Date.now() });
+                        await writeReaderStore('pdf-tasks', { key: taskKey, fileName: file.name, totalPages: pdfDocument.numPages, completedPages: pageNumber, pages: extractedPages, updatedAt: Date.now() });
 
                         setPdfExtractionProgress({ current: pageNumber, total: pdfDocument.numPages });
                         if (pageNumber % 3 === 0) await new Promise(resolve => setTimeout(resolve, 0));
                     }
 
-                    const extractedText = extractedParagraphs.join("\n\n").trim();
-                    if (extractedText.length < 80) {
-                        throw new Error("这份 PDF 可能是扫描版，未检测到可提取文字。请使用原样阅读。");
-                    }
+                    const totalText = extractedPages.map(page => page.text).join("
 
-                    setInputText(previous => previous ? `${previous}\n\n${extractedText}` : extractedText);
+").trim();
+                    if (totalText.length < 80) {
+                        throw new Error("未能识别到足够正文，请检查OCR模型与文件清晰度。");
+                    }
+                    const sourceHash = await hashText(`${file.name}:${file.size}:${file.lastModified}`);
+                    const session = await prepareBookImport({ sourceName: file.name, sourceHash, pages: extractedPages });
                     setPendingPdfFile(null);
                     setIsPdfChoiceOpen(false);
                     setIsPdfMode(false);
                     setPdfFile(null);
-                    window.showToast(`已在本地重建 ${pdfDocument.numPages} 页、${extractedParagraphs.length} 个段落，文件未上传`, "success");
-                    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+                    window.showToast(`已识别 ${session.articles.length} 篇文章，忽略 ${session.ignored.length} 个目录、封面或低信息页`, "success");
                 } catch (error) {
                     window.showToast(`PDF 本地提取失败：${error.message}`, "error");
                 } finally {
@@ -2523,38 +2785,43 @@ ${JSON.stringify(miniCorpus, null, 2)}
             };
 
             const extractFilesToText = async (files) => {
-                for (let file of files) {
-                    if (file.size > 4 * 1024 * 1024) {
-                        window.showToast(`文件 ${file.name} 超过 4MB，为避免卡死请拆分后上传`, "error");
+                for (const file of files) {
+                    if (file.size > 12 * 1024 * 1024) {
+                        window.showToast(`文件 ${file.name} 超过 12MB，请压缩或拆分后导入`, "error");
                         return;
                     }
                 }
                 setIsExtracting(true);
-                let combinedText = "";
                 try {
-                    for (let i = 0; i < files.length; i++) {
-                        const fileBytes = new Uint8Array(await files[i].arrayBuffer());
+                    const pages = [];
+                    for (let index = 0; index < files.length; index += 1) {
+                        const file = files[index];
+                        const fileBytes = new Uint8Array(await file.arrayBuffer());
                         const fileHash = await hashBytes(fileBytes);
                         const mediaCacheKey = `media:${fileHash}`;
                         const cachedMedia = await readReaderStore('ai-cache', mediaCacheKey);
-                        if (cachedMedia?.value) {
-                            combinedText += (combinedText ? '\n\n' : '') + cachedMedia.value;
-                            continue;
+                        let text = cachedMedia?.value || "";
+                        if (!text) {
+                            const base64Data = await new Promise(resolve => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                                reader.readAsDataURL(file);
+                            });
+                            text = await extractTextFromMedia(base64Data, file.type, apiConfig);
+                            await writeReaderStore('ai-cache', { key: mediaCacheKey, value: text, createdAt: Date.now(), task: 'ocr' });
                         }
-                        const base64Data = await new Promise((res) => {
-                            const reader = new FileReader();
-                            reader.onloadend = () => res(reader.result.split(',')[1]);
-                            reader.readAsDataURL(files[i]);
-                        });
-                        const extractedMediaText = await extractTextFromMedia(base64Data, files[i].type, apiConfig);
-                        await writeReaderStore('ai-cache', { key: mediaCacheKey, value: extractedMediaText, createdAt: Date.now(), task: 'ocr' });
-                        combinedText += (combinedText ? '\n\n' : '') + extractedMediaText;
+                        pages.push({ pageNumber: index + 1, text: normalizeBookText(text), usedOcr: true });
                     }
-                    setInputText(prev => prev + (prev ? '\n\n' : '') + combinedText);
-                    window.showToast("文件提取成功！请点击进入精读以保存记录", "success");
-                } catch (err) { window.showToast(err.message, "error"); }
-                setIsExtracting(false);
-                if(fileInputRef.current) fileInputRef.current.value = '';
+                    const sourceName = files.length === 1 ? files[0].name : `${files[0].name} 等 ${files.length} 页`;
+                    const sourceHash = await hashText(files.map(file => `${file.name}:${file.size}:${file.lastModified}`).join('|'));
+                    const session = await prepareBookImport({ sourceName, sourceHash, pages });
+                    window.showToast(`已识别 ${session.articles.length} 篇文章，请选择要保存或精读的内容`, "success");
+                } catch (error) {
+                    window.showToast(`识别失败：${error.message}`, "error");
+                } finally {
+                    setIsExtracting(false);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                }
             };
 
             const handleFileUpload = (e) => {
@@ -2603,6 +2870,127 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const extractCurrentPdf = () => {
                 if (!pdfFile) return;
                 extractPdfTextLocally(pdfFile);
+            };
+
+            const openMapEditorModal = () => {
+                if (!fullMapData?.mindmap) return;
+                setMapEditDraft(cloneJson(fullMapData));
+                setIsMapEditing(false);
+                setIsMapModalOpen(true);
+                setMapScale(1);
+            };
+
+            const updateMapDraftNode = (nodePath, patch) => {
+                setMapEditDraft(previous => previous ? { ...previous, mindmap: updateMindMapNodeAtPath(previous.mindmap, nodePath, node => ({ ...node, ...patch })) } : previous);
+            };
+
+            const addMapDraftChild = (nodePath) => {
+                setMapEditDraft(previous => previous ? {
+                    ...previous,
+                    mindmap: updateMindMapNodeAtPath(previous.mindmap, nodePath, node => ({
+                        ...node,
+                        children: [...(node.children || []), { nameEn: 'New branch', nameZh: '新分支', children: [] }]
+                    }))
+                } : previous);
+                setCollapsedMapNodes(previous => {
+                    const next = new Set(previous);
+                    next.delete(nodePath);
+                    return next;
+                });
+            };
+
+            const deleteMapDraftNode = (nodePath) => {
+                if (!window.confirm('确定删除这个节点及其子节点吗？')) return;
+                setMapEditDraft(previous => previous ? { ...previous, mindmap: removeMindMapNodeAtPath(previous.mindmap, nodePath) } : previous);
+            };
+
+            const saveMapEdits = () => {
+                if (!mapEditDraft?.mindmap) return;
+                setFullMapData(mapEditDraft);
+                if (currentHistoryId) {
+                    const record = history.find(item => item.id === currentHistoryId) || { id: currentHistoryId, text: inputText, createdAt: Date.now() };
+                    saveHistoryToCloud({ ...record, fullMapData: mapEditDraft });
+                }
+                setIsMapEditing(false);
+                window.showToast('结构树编辑已保存到当前文章', 'success');
+            };
+
+            const prepareBookImport = async ({ sourceName, sourceHash, pages }) => {
+                const segmented = segmentBookPages(pages);
+                if (!segmented.articles.length) throw new Error('没有识别到可阅读的文章，请检查文件清晰度或OCR配置');
+                const key = `book-import:${sourceHash || await hashText(`${sourceName}:${Date.now()}`)}`;
+                const session = {
+                    key,
+                    sourceName,
+                    createdAt: Date.now(),
+                    articles: segmented.articles,
+                    ignored: segmented.ignored,
+                    pageCount: pages.length
+                };
+                await writeReaderStore('book-imports', session);
+                setBookImportSession(session);
+                setBookImportPreviewId(session.articles[0]?.id || null);
+                setLatestBookImportKey(key);
+                persistLocalState({ latestBookImportKey: key });
+                setIsBookImportOpen(true);
+                return session;
+            };
+
+            const openLatestBookImport = async () => {
+                if (!latestBookImportKey) {
+                    window.showToast('暂无待选择的书籍识别结果', 'warning');
+                    return;
+                }
+                const session = await readReaderStore('book-imports', latestBookImportKey);
+                if (!session) {
+                    window.showToast('本地识别结果已被浏览器清理', 'warning');
+                    return;
+                }
+                setBookImportSession(session);
+                setBookImportPreviewId(session.articles?.[0]?.id || null);
+                setIsBookImportOpen(true);
+            };
+
+            const saveSelectedBookArticles = async (openFirst = false) => {
+                const selected = (bookImportSession?.articles || []).filter(article => article.selected);
+                if (!selected.length) {
+                    window.showToast('请至少选择一篇文章', 'warning');
+                    return;
+                }
+                const createdAt = Date.now();
+                const records = [];
+                for (let index = 0; index < selected.length; index += 1) {
+                    const article = selected[index];
+                    const articleKey = `${bookImportSession.key}:article:${article.id}`;
+                    await writeReaderStore('book-articles', { key: articleKey, ...article, sourceName: bookImportSession.sourceName, savedAt: createdAt });
+                    records.push({
+                        id: `book-${createdAt}-${index}`,
+                        title: article.title,
+                        preview: article.text.slice(0, 180),
+                        localArticleKey: articleKey,
+                        sourceType: 'book-article',
+                        timestamp: new Date(createdAt).toLocaleString('zh-CN'),
+                        createdAt: createdAt - index,
+                        fullMapData: null,
+                        fullTranslations: []
+                    });
+                }
+                setHistory(previous => {
+                    const next = [...records, ...previous.filter(item => !records.some(record => record.id === item.id))];
+                    persistLocalState({ history: next });
+                    return next;
+                });
+                window.showToast(`已将 ${records.length} 篇文章保存到当前浏览器`, 'success');
+                if (openFirst && records[0]) {
+                    const stored = await readReaderStore('book-articles', records[0].localArticleKey);
+                    setInputText(stored?.text || '');
+                    setCurrentHistoryId(records[0].id);
+                    setIsReadingMode(true);
+                    setFullMapData(null);
+                    setFullTranslations([]);
+                    setIsBookImportOpen(false);
+                    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'auto' }));
+                }
             };
 
             const toggleMapNode = (nodePath) => {
@@ -2670,7 +3058,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const currentAnnotations = Array.isArray(currentArticleNotes.annotations) ? currentArticleNotes.annotations : [];
 
             return (
-                <div className={typographyConfig.theme === 'dark' ? 'dark' : ''}>
+                <div className={`reader-theme-root ${typographyConfig.theme === 'dark' ? 'dark' : ''}`}>
                     <div className={`min-h-screen bg-[#F9FAFB] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans pb-24 relative overflow-x-hidden transition-colors duration-300 ${isImmersive ? 'reader-immersive' : ''}`}>
                         
                         {/* 排版设置弹窗 */}
@@ -2789,12 +3177,12 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                         ) : (
                                             <div className="space-y-3">
                                                 {history.map((record) => (
-                                                    <div key={record.id} onClick={() => loadHistoryRecord(record)} className={`p-4 rounded-xl border cursor-pointer group transition-all ${currentHistoryId === record.id ? 'bg-gray-900 dark:bg-gray-800 border-gray-900 dark:border-gray-600 text-white shadow-md' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-sky-300 dark:hover:border-sky-600 shadow-sm'}`}>
+                                                    <div key={record.id} onClick={() => loadHistoryRecord(record)} className={`p-4 rounded-xl border cursor-pointer group transition-all ${currentHistoryId === record.id ? 'bg-sky-700 dark:bg-gray-800 border-sky-700 dark:border-gray-600 text-white shadow-md' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-sky-300 dark:hover:border-sky-600 shadow-sm'}`}>
                                                         <div className="flex justify-between items-start mb-2">
                                                             <div className={`text-xs font-medium ${currentHistoryId === record.id ? 'text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>{record.timestamp}</div>
                                                             <button onClick={(e) => deleteHistoryRecord(record.id, e)} className={`opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity ${currentHistoryId === record.id ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400'}`}><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                                         </div>
-                                                        <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{window.getExcerpt(record.text)}</div>
+                                                        <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{record.title || window.getExcerpt(record.text || record.preview || '')}</div>
                                                         <div className="mt-3 flex flex-wrap gap-2 items-center text-[10px] font-medium">
                                                             {record.fullMapData && <span className={`px-2 py-0.5 rounded-sm flex items-center ${currentHistoryId === record.id ? 'bg-gray-700 text-gray-300' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-800'}`}><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"></path></svg>已保存逻辑树</span>}
                                                             {record.fullTranslations?.length > 0 && <span className={`px-2 py-0.5 rounded-sm flex items-center ${currentHistoryId === record.id ? 'bg-gray-700 text-gray-300' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-800'}`}><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path></svg>已缓存全局翻译</span>}
@@ -2945,6 +3333,67 @@ ${JSON.stringify(miniCorpus, null, 2)}
                             </div>
                         )}
 
+                        {isBookImportOpen && bookImportSession && (
+                            <div className="fixed inset-0 z-[75] flex items-center justify-center p-3 sm:p-5">
+                                <button className="absolute inset-0 bg-slate-700/30 dark:bg-black/65 backdrop-blur-sm" onClick={() => setIsBookImportOpen(false)} aria-label="关闭书籍识别结果"></button>
+                                <div className="relative w-full max-w-6xl max-h-[92vh] bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-sm shadow-2xl flex flex-col overflow-hidden">
+                                    <div className="px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-gray-700 flex flex-wrap items-center gap-3">
+                                        <div className="min-w-0 flex-1">
+                                            <h2 className="text-[16px] font-semibold text-slate-800 dark:text-gray-100">书籍识别结果</h2>
+                                            <p className="mt-1 text-[12px] text-slate-500 dark:text-gray-400 truncate">{bookImportSession.sourceName}</p>
+                                        </div>
+                                        <div className="text-[12px] text-slate-500 dark:text-gray-400">
+                                            识别 {bookImportSession.articles.length} 篇 · 忽略 {bookImportSession.ignored.length} 页 · 共 {bookImportSession.pageCount} 页
+                                        </div>
+                                        <button onClick={() => setIsBookImportOpen(false)} className="w-9 h-9 grid place-items-center rounded-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-gray-800" aria-label="关闭">×</button>
+                                    </div>
+                                    <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[390px_minmax(0,1fr)]">
+                                        <div className="min-h-0 border-r border-slate-200 dark:border-gray-700 flex flex-col">
+                                            <div className="p-3 border-b border-slate-200 dark:border-gray-700 flex items-center justify-between gap-2">
+                                                <span className="text-[12px] text-slate-500">选择要保存的文章</span>
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => setBookImportSession(session => ({ ...session, articles: session.articles.map(article => ({ ...article, selected: true })) }))} className="px-2 py-1 text-[11px] text-sky-700 hover:bg-sky-50 rounded-sm">全选</button>
+                                                    <button onClick={() => setBookImportSession(session => ({ ...session, articles: session.articles.map(article => ({ ...article, selected: false })) }))} className="px-2 py-1 text-[11px] text-slate-500 hover:bg-slate-100 rounded-sm">取消全选</button>
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar space-y-2">
+                                                {bookImportSession.articles.map(article => (
+                                                    <div key={article.id} className={`border rounded-sm p-3 cursor-pointer transition-colors ${bookImportPreviewId === article.id ? 'border-sky-300 bg-sky-50/70 dark:bg-sky-900/20' : 'border-slate-200 dark:border-gray-700 hover:border-sky-200'}`} onClick={() => setBookImportPreviewId(article.id)}>
+                                                        <div className="flex items-start gap-2">
+                                                            <input type="checkbox" checked={Boolean(article.selected)} onClick={event => event.stopPropagation()} onChange={event => setBookImportSession(session => ({ ...session, articles: session.articles.map(item => item.id === article.id ? { ...item, selected: event.target.checked } : item) }))} className="mt-1" />
+                                                            <div className="min-w-0 flex-1">
+                                                                <input value={article.title} onClick={event => event.stopPropagation()} onChange={event => setBookImportSession(session => ({ ...session, articles: session.articles.map(item => item.id === article.id ? { ...item, title: event.target.value } : item) }))} className="w-full bg-transparent text-[13px] font-medium text-slate-800 dark:text-gray-100 border-b border-transparent focus:border-sky-300 outline-none" />
+                                                                <div className="mt-1 text-[10px] text-slate-400">第 {article.pageStart}{article.pageEnd !== article.pageStart ? `–${article.pageEnd}` : ''} 页 · {article.wordCount} 词</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="min-h-0 flex flex-col bg-slate-50/50 dark:bg-gray-950/30">
+                                            <div className="px-4 py-3 border-b border-slate-200 dark:border-gray-700 text-[12px] text-slate-500">文章预览（仅本地，不调用模型）</div>
+                                            <div className="flex-1 overflow-y-auto p-5 sm:p-7 custom-scrollbar">
+                                                {(() => {
+                                                    const article = bookImportSession.articles.find(item => item.id === bookImportPreviewId) || bookImportSession.articles[0];
+                                                    return article ? (
+                                                        <div className="max-w-[72ch] mx-auto">
+                                                            <h3 className="text-lg font-semibold text-slate-800 dark:text-gray-100">{article.title}</h3>
+                                                            <div className="mt-4 whitespace-pre-wrap font-serif text-[15px] leading-[1.75] text-slate-700 dark:text-gray-300">{article.text.slice(0, 12000)}{article.text.length > 12000 ? '\n\n……预览已截断，完整正文会保存在本地。' : ''}</div>
+                                                        </div>
+                                                    ) : <div className="text-center text-slate-400">暂无可预览文章</div>;
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="px-4 sm:px-6 py-4 border-t border-slate-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center gap-3">
+                                        <div className="flex-1 text-[11px] text-slate-400">目录、封面、插图和低信息页已自动忽略；结果保存在当前浏览器，可稍后继续选择。</div>
+                                        <button onClick={() => saveSelectedBookArticles(false)} className="min-h-[40px] px-4 rounded-sm border border-sky-200 text-sky-700 bg-white hover:bg-sky-50 text-[13px] font-medium">保存所选到本地</button>
+                                        <button onClick={() => saveSelectedBookArticles(true)} className="min-h-[40px] px-5 rounded-sm bg-sky-700 text-white hover:bg-sky-600 text-[13px] font-medium">保存并精读第一篇</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {isPdfChoiceOpen && pendingPdfFile && (
                             <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
                                 <button className="absolute inset-0 bg-gray-900/45 dark:bg-black/65 backdrop-blur-sm" onClick={() => { if (!isExtracting) { setIsPdfChoiceOpen(false); setPendingPdfFile(null); } }} aria-label="关闭 PDF 打开方式选择"></button>
@@ -2965,8 +3414,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                             <span className="block mt-1 text-[12px] text-gray-500 dark:text-gray-400">不提取文字，不上传文件</span>
                                         </button>
                                         <button onClick={extractPendingPdf} disabled={isExtracting} className="min-h-[64px] px-4 text-left rounded-md border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-wait">
-                                            <span className="block text-[14px] font-semibold text-gray-800 dark:text-gray-200">{isExtracting ? `正在本地提取 ${pdfExtractionProgress.current}/${pdfExtractionProgress.total || '-'}` : "提取为精读文本"}</span>
-                                            <span className="block mt-1 text-[12px] text-gray-500 dark:text-gray-400">PDF.js 逐页读取文字，不上传文件，不受 4MB 限制</span>
+                                            <span className="block text-[14px] font-semibold text-gray-800 dark:text-gray-200">{isExtracting ? `正在本地提取 ${pdfExtractionProgress.current}/${pdfExtractionProgress.total || '-'}` : "智能识别并拆分"}</span>
+                                            <span className="block mt-1 text-[12px] text-gray-500 dark:text-gray-400">优先读取文本层；扫描页才按页调用OCR，完成后预览并选择文章</span>
                                         </button>
                                     </div>
                                 </div>
@@ -2988,6 +3437,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                     {corpusCount} 句真题 · {Object.keys(presetDict).length} 个预设词 · {Object.keys(hardDict).length} 个生词
                                                 </div>
                                                 <button onClick={() => { setIsHistoryDrawerOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">阅读库</button>
+                                                <button onClick={() => { openLatestBookImport(); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">待选书籍{latestBookImportKey ? ' · 已保存' : ''}</button>
                                                 <button onClick={() => { setIsTypographyModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">阅读排版</button>
                                                 <button onClick={() => { setIsDictModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">个人词库</button>
                                                 <button onClick={() => { setIsApiModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">模型配置</button>
@@ -3038,13 +3488,13 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                     <textarea className="w-full h-[48vh] min-h-[320px] p-4 bg-gray-50/60 dark:bg-gray-950/30 border border-gray-200 dark:border-gray-800 rounded-sm outline-none resize-none font-serif text-[15.5px] leading-relaxed text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:border-gray-500 dark:focus:border-gray-600" placeholder="粘贴英文文章..." value={inputText} onChange={(e) => setInputText(e.target.value)} />
                                     <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
                                         <span className="text-[12px] text-gray-400 dark:text-gray-500">{inputText.trim() ? `${inputText.trim().split(/\s+/).length} 词` : "尚未添加内容"}</span>
-                                        <button onClick={handleStartReading} disabled={isExtracting || !inputText.trim()} className="w-full sm:w-auto min-h-[46px] bg-gray-900 dark:bg-blue-600 text-white px-8 rounded-sm font-medium text-[14px] hover:bg-gray-800 dark:hover:bg-blue-700 active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">进入精读</button>
+                                        <button onClick={handleStartReading} disabled={isExtracting || !inputText.trim()} className="w-full sm:w-auto min-h-[46px] bg-sky-700 dark:bg-blue-600 text-white px-8 rounded-sm font-medium text-[14px] hover:bg-gray-800 dark:hover:bg-blue-700 active:scale-[0.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">进入精读</button>
                                     </div>
                                 </div>
                             ) : (
                                 <div className={`reader-workspace ${layoutMode === 'focus' ? 'reader-workspace-focus' : ''} ${layoutMode === 'split' && rightPanelOpen ? 'reader-workspace-split' : ''}`} style={layoutMode === 'split' && rightPanelOpen ? { gridTemplateColumns: `minmax(0, ${splitRatio}fr) minmax(380px, ${100 - splitRatio}fr)` } : undefined}>
                                 <article className="reader-main-column reader-article-flow py-8 animate-fade-in relative transition-all" style={{ '--reader-measure': `${typographyConfig.measure || 66}ch`, paddingLeft: `clamp(16px, ${typographyConfig.paddingX || 6}vw, 96px)`, paddingRight: `clamp(16px, ${typographyConfig.paddingX || 6}vw, 96px)` }}>
-                                    <div className="reader-article-toolbar sticky top-16 z-30 -mx-2 sm:mx-0 mb-8 px-2 sm:px-0 py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur flex flex-col sm:flex-row sm:justify-center sm:items-center gap-2 sm:gap-3">
+                                    <div className="reader-article-toolbar w-full sticky top-16 z-30 -mx-2 sm:mx-0 mb-8 px-2 sm:px-0 py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur flex flex-col sm:flex-row sm:justify-center sm:items-center gap-2 sm:gap-3">
                                         <div className="w-full sm:w-auto bg-gray-100 dark:bg-gray-800 p-1 rounded-sm flex gap-1 border border-gray-200 dark:border-gray-700">
                                             <button onClick={() => setReadingMode('pure')} className={`flex-1 sm:flex-none min-h-[40px] px-4 sm:px-5 rounded-[2px] whitespace-nowrap text-[13px] font-medium transition-all ${readingMode === 'pure' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>纯净阅读</button>
                                             <button onClick={() => setReadingMode('intensive')} className={`flex-1 sm:flex-none min-h-[40px] px-4 sm:px-5 rounded-[2px] whitespace-nowrap text-[13px] font-medium transition-all ${readingMode === 'intensive' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>深度精读</button>
@@ -3075,7 +3525,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                     <option value="blue">基础词汇</option>
                                                     <option value="none">关闭高亮</option>
                                                 </select>
-                                                <button onClick={handleToggleGlobalLogic} disabled={isGlobalLogicLoading} className={`min-h-[40px] shrink-0 flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium border px-3 rounded-sm transition-all ${showGlobalLogic ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-gray-900 dark:border-gray-100' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                                                <button onClick={handleToggleGlobalLogic} disabled={isGlobalLogicLoading} className={`min-h-[40px] shrink-0 flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium border px-3 rounded-sm transition-all ${showGlobalLogic ? 'bg-teal-600 dark:bg-gray-100 text-white dark:text-gray-900 border-teal-600 dark:border-gray-100' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
                                                     {isGlobalLogicLoading ? <svg className="animate-spin w-3.5 h-3.5 loader-spin text-teal-600 dark:text-teal-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className={`w-3.5 h-3.5 ${showGlobalLogic ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> }
                                                     <span>{isGlobalLogicLoading ? "分析中..." : showGlobalLogic ? "收起逻辑" : "全文逻辑"}</span>
                                                 </button>
@@ -3143,7 +3593,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                         </div>
                                                         <button onClick={expandAllMapNodes} className="h-9 px-3 rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] text-gray-600 dark:text-gray-300 hover:border-gray-500">展开全部</button>
                                                         <button onClick={collapseAllMapNodes} className="h-9 px-3 rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] text-gray-600 dark:text-gray-300 hover:border-gray-500">收起全部</button>
-                                                        <button onClick={() => { setIsMapModalOpen(true); setMapScale(1); }} className="h-9 px-3 rounded-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[12px] font-medium hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">全屏查看</button>
+                                                        <button onClick={openMapEditorModal} className="h-9 px-3 rounded-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 text-[12px] font-medium hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">全屏查看</button>
                                                     </div>
                                                 </div>
                                                 <div className="w-full bg-gray-50/70 dark:bg-gray-950/30 p-2 sm:p-3 border border-gray-200 dark:border-gray-700">
@@ -3162,7 +3612,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                     ['analysis', '精读结果'],
                                                     ['notes', `笔记${currentAnnotations.length ? ` ${currentAnnotations.length}` : ''}`]
                                                 ].map(([tab, label]) => (
-                                                    <button key={tab} onClick={() => setRightPanelTab(tab)} aria-pressed={rightPanelTab === tab} className={`flex-1 min-h-[38px] px-2 rounded-sm text-[12px] font-medium ${rightPanelTab === tab ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{label}</button>
+                                                    <button key={tab} onClick={() => setRightPanelTab(tab)} aria-pressed={rightPanelTab === tab} className={`flex-1 min-h-[38px] px-2 rounded-sm text-[12px] font-medium ${rightPanelTab === tab ? 'bg-sky-700 text-white dark:bg-gray-100 dark:text-gray-900' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{label}</button>
                                                 ))}
                                                 <button onClick={() => setRightPanelOpen(false)} aria-label="关闭侧栏" className="w-8 h-8 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">×</button>
                                             </div>
@@ -3182,9 +3632,25 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                                     <div className="p-3 border border-amber-200 dark:border-amber-800 bg-amber-50/60 dark:bg-amber-900/15 rounded-sm">
                                                                         <div className="text-[11px] font-medium text-amber-800 dark:text-amber-300">正在{editingAnnotationId ? '编辑' : '添加'}批注</div>
                                                                         <blockquote className="mt-2 pl-3 border-l-2 border-amber-400 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300 line-clamp-4">“{annotationComposer.anchor.exact}”</blockquote>
-                                                                        <textarea autoFocus value={annotationDraft} onChange={(event) => setAnnotationDraft(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') saveAnnotation(); }} className="mt-3 w-full min-h-[96px] resize-y bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 outline-none focus:border-amber-500" placeholder="写下你的理解、疑问或考试提示…" />
+                                                                        <div className="mt-3">
+                                                                            <div className="mb-1.5 text-[11px] text-slate-500 dark:text-slate-400">批注颜色</div>
+                                                                            <div className="flex flex-wrap gap-2">
+                                                                                {Object.entries(ANNOTATION_COLOR_MAP).map(([key, palette]) => (
+                                                                                    <button
+                                                                                        key={key}
+                                                                                        type="button"
+                                                                                        onClick={() => setAnnotationColor(key)}
+                                                                                        className={`w-7 h-7 rounded-full border-2 transition-transform ${annotationColor === key ? 'scale-110 border-slate-600 dark:border-white' : 'border-white dark:border-gray-700'}`}
+                                                                                        style={{ background: palette.border }}
+                                                                                        aria-label={`选择${palette.label}批注`}
+                                                                                        title={palette.label}
+                                                                                    ></button>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                        <textarea autoFocus value={annotationDraft} onChange={(event) => setAnnotationDraft(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') saveAnnotation(); }} className="mt-3 w-full min-h-[96px] resize-y bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-700 p-3 outline-none focus:border-sky-500" placeholder="写下你的理解、疑问或考试提示…" />
                                                                         <div className="mt-2 flex justify-end gap-2">
-                                                                            <button onClick={() => { setAnnotationComposer(null); setAnnotationDraft(""); setEditingAnnotationId(null); }} className="min-h-[34px] px-3 text-[12px] text-gray-500 hover:bg-white dark:hover:bg-gray-800 rounded-sm">取消</button>
+                                                                            <button onClick={() => { setAnnotationComposer(null); setAnnotationDraft(""); setAnnotationColor("gold"); setEditingAnnotationId(null); }} className="min-h-[34px] px-3 text-[12px] text-gray-500 hover:bg-white dark:hover:bg-gray-800 rounded-sm">取消</button>
                                                                             <button onClick={saveAnnotation} className="min-h-[34px] px-3 text-[12px] font-medium bg-amber-500 text-gray-950 hover:bg-amber-400 rounded-sm">{editingAnnotationId ? '更新批注' : '保存批注'}</button>
                                                                         </div>
                                                                     </div>
@@ -3198,8 +3664,10 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                                     </div>
                                                                 ) : (
                                                                     <div className="space-y-3">
-                                                                        {currentAnnotations.map(annotation => (
-                                                                            <div key={annotation.id} className={`p-3 border rounded-sm transition-colors ${activeAnnotationId === annotation.id ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40'}`}>
+                                                                        {currentAnnotations.map(annotation => {
+                                                                            const palette = ANNOTATION_COLOR_MAP[annotation.color || "gold"] || ANNOTATION_COLOR_MAP.gold;
+                                                                            return (
+                                                                            <div key={annotation.id} style={{ borderLeftColor: palette.border, borderLeftWidth: "4px" }} className={`p-3 border rounded-sm transition-colors ${activeAnnotationId === annotation.id ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40'}`}>
                                                                                 <button onClick={() => focusAnnotation(annotation.id)} className="w-full text-left">
                                                                                     <div className="text-[11px] text-amber-700 dark:text-amber-400 line-clamp-2">“{annotation.anchor.exact}”</div>
                                                                                     <div className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">{annotation.note}</div>
@@ -3213,7 +3681,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
-                                                                        ))}
+                                                                            );
+                                                                        })}
                                                                     </div>
                                                                 )}
                                                             </>
@@ -3247,14 +3716,32 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                         <button onClick={() => setMapScale(s => Math.min(2, s + 0.1))} className="w-8 h-8 flex items-center justify-center bg-white dark:bg-gray-800 rounded-[2px] text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-transform shadow-sm" aria-label="放大导图">+</button>
                                     </div>
                                     <button onClick={expandAllMapNodes} className="h-9 px-3 rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] text-gray-600 dark:text-gray-300 hover:border-gray-500">展开全部</button>
-                                    <button onClick={collapseAllMapNodes} className="h-9 px-3 rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] text-gray-600 dark:text-gray-300 hover:border-gray-500">收起全部</button>
-                                    <div className="ml-auto text-[12px] text-gray-400 hidden md:block">点击分支箭头单独展开或收起</div>
-                                    <button onClick={() => setIsMapModalOpen(false)} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-sm text-[13px] font-medium hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-transform">退出全屏</button>
+                                    <button onClick={collapseAllMapNodes} className="h-9 px-3 rounded-sm border border-slate-200 dark:border-gray-700 text-[12px] text-slate-600 dark:text-gray-300 hover:border-sky-300">收起全部</button>
+                                    {!isMapEditing ? (
+                                        <button onClick={() => setIsMapEditing(true)} className="h-9 px-3 rounded-sm bg-sky-50 border border-sky-200 text-sky-700 text-[12px] font-medium hover:bg-sky-100">编辑内容</button>
+                                    ) : (
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setMapEditDraft(cloneJson(fullMapData)); setIsMapEditing(false); }} className="h-9 px-3 rounded-sm border border-slate-200 text-slate-600 text-[12px] hover:bg-slate-50">取消编辑</button>
+                                            <button onClick={saveMapEdits} className="h-9 px-3 rounded-sm bg-sky-700 text-white text-[12px] font-medium hover:bg-sky-600">保存编辑</button>
+                                        </div>
+                                    )}
+                                    <div className="ml-auto text-[12px] text-gray-400 hidden md:block">{isMapEditing ? '可修改双语标题、添加或删除分支' : '点击右侧箭头展开或收起'}</div>
+                                    <button onClick={() => { setIsMapModalOpen(false); setIsMapEditing(false); setMapEditDraft(null); }} className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-sm text-[13px] font-medium hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 transition-transform">退出全屏</button>
                                 </div>
                                 <div className="flex-1 overflow-auto p-3 md:p-8 custom-scrollbar">
                                     <div className="max-w-5xl mx-auto transition-transform duration-200 ease-out origin-top" style={{ transform: `scale(${mapScale})` }}>
                                         <div className="bg-white dark:bg-gray-800 p-3 md:p-5 border border-gray-200 dark:border-gray-700">
-                                            <LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode={mapMode} collapsedNodes={collapsedMapNodes} onToggle={toggleMapNode} />
+                                            <LogicTreeNode
+                                                node={(mapEditDraft || fullMapData).mindmap}
+                                                isRoot={true}
+                                                displayMode={mapMode}
+                                                collapsedNodes={collapsedMapNodes}
+                                                onToggle={toggleMapNode}
+                                                isEditing={isMapEditing}
+                                                onUpdateNode={updateMapDraftNode}
+                                                onAddChild={addMapDraftChild}
+                                                onDeleteNode={deleteMapDraftNode}
+                                            />
                                         </div>
                                     </div>
                                 </div>
