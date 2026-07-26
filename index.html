@@ -836,7 +836,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         };
 
-        const Paragraph = ({ text, activeDicts, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig }) => {
+        const Paragraph = ({ text, activeDicts, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig, onOpenAnalysis }) => {
             const [showTranslation, setShowTranslation] = useState(false);
             const [localTranslation, setLocalTranslation] = useState("");
             const [isLocalTransLoading, setIsLocalTransLoading] = useState(false);
@@ -942,6 +942,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     const data = await callGeminiIntensiveAnalysis(getModelSafeText(text, 10000, "长难句解构"), apiConfig);
                     setAnalysisData(data);
                     setShowAnalysis(true);
+                    onOpenAnalysis?.(data);
                 } catch (e) {
                     window.showToast(`句法解构异常: ${e.message}`, "error");
                 } finally {
@@ -1717,6 +1718,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [rightPanelTab, setRightPanelTab] = useState(['outline', 'analysis', 'notes'].includes(savedLayoutState.rightPanelTab) ? savedLayoutState.rightPanelTab : 'outline');
             const [rightPanelOpen, setRightPanelOpen] = useState(savedLayoutState.rightPanelOpen !== false);
             const [splitRatio, setSplitRatio] = useState(Number.isFinite(savedLayoutState.splitRatio) ? Math.min(70, Math.max(52, savedLayoutState.splitRatio)) : 58);
+            const [rightPanelAnalysis, setRightPanelAnalysis] = useState(null);
             const [isImmersive, setIsImmersive] = useState(false);
             const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
 
@@ -2700,6 +2702,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 isTransLoading={isFullTransLoading} 
                                                 apiConfig={apiConfig}
                                                 typographyConfig={typographyConfig}
+                                                onOpenAnalysis={(data) => { setRightPanelAnalysis(data); setRightPanelTab('analysis'); setRightPanelOpen(true); }}
                                             />
                                         ))}
                                     </div>
@@ -2763,7 +2766,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                             </div>
                                             <div className="p-4 text-[13px] text-gray-700 dark:text-gray-300">
                                                 {rightPanelTab === 'outline' && (fullMapData?.mindmap ? <LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode="bilingual" collapsedNodes={collapsedMapNodes} onToggle={toggleMapNode} /> : <p className="text-gray-400 dark:text-gray-500">Generate the outline from the reader actions.</p>)}
-                                                {rightPanelTab === 'analysis' && (globalLogicData ? <div className="space-y-3"><h3 className="font-semibold text-gray-900 dark:text-gray-100">Analysis</h3><p className="leading-relaxed">{globalLogicData.coreMeaning}</p><p className="text-gray-500 dark:text-gray-400">{globalLogicData.logicalStructure}</p></div> : <p className="text-gray-400 dark:text-gray-500">Run full-text analysis to see results here.</p>)}
+                                                {rightPanelTab === 'analysis' && (rightPanelAnalysis ? <div className="space-y-3"><h3 className="font-semibold text-gray-900 dark:text-gray-100">Paragraph analysis</h3>{rightPanelAnalysis.complexSentences?.map((item, index) => <div key={index} className="border-b border-gray-200 dark:border-gray-700 pb-3"><p className="font-medium leading-relaxed">{item.originalSentence}</p><p className="mt-1 text-gray-500 dark:text-gray-400">{item.sentenceTranslation}</p></div>)}</div> : globalLogicData ? <div className="space-y-3"><h3 className="font-semibold text-gray-900 dark:text-gray-100">Analysis</h3><p className="leading-relaxed">{globalLogicData.coreMeaning}</p><p className="text-gray-500 dark:text-gray-400">{globalLogicData.logicalStructure}</p></div> : <p className="text-gray-400 dark:text-gray-500">Run full-text analysis to see results here.</p>)}
                                                 {rightPanelTab === 'notes' && <textarea className="w-full min-h-[260px] resize-y bg-transparent border border-gray-200 dark:border-gray-700 p-3 outline-none focus:border-gray-500" placeholder="Write local reading notes..." />}
                                             </div>
                                         </div>

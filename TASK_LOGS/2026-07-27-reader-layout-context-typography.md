@@ -114,3 +114,11 @@ GitHub：未上传，等待用户本地验收。
 - Validation: stage-6 page loaded successfully with no visible Babel error text; the trailing whitespace found during commit was removed and the final check passes.
 - Known limitation: automated browser tooling in this environment does not expose text-selection helpers, so drag-selection positioning needs manual validation.
 - Next: connect right-panel analysis behavior in stage 7.
+
+## 13. Stage 7: Right learning panel result routing
+
+- Status: completed locally.
+- Paragraph analysis now routes its result to the right-panel analysis tab and opens the panel in split mode, while existing full-text analysis remains the fallback source.
+- The panel reuses the paragraph request result rather than issuing a second request, preventing duplicate analysis calls for the same action.
+- Validation: stage-7 page loaded successfully with no visible Babel compilation error text.
+- Next: consider the optional draggable split divider in stage 8.
