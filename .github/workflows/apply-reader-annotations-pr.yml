@@ -24,10 +24,37 @@ jobs:
           ref: feat/reader-annotations-v2
           fetch-depth: 0
 
-      - name: Apply annotation patch
-        run: python scripts/apply_reader_annotations.py
+      - name: Apply annotation patch and capture diagnostics
+        id: apply_patch
+        shell: bash
+        run: |
+          set +e
+          python scripts/apply_reader_annotations.py > annotation-patch.log 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -ne 0 ]; then
+            echo "Annotation patch failed:"
+            cat annotation-patch.log
+          else
+            cat annotation-patch.log
+          fi
+          exit 0
+
+      - name: Persist patch failure report
+        if: steps.apply_patch.outputs.status != '0'
+        shell: bash
+        run: |
+          mkdir -p TASK_LOGS
+          cp annotation-patch.log TASK_LOGS/annotation-patch-error.txt
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add TASK_LOGS/annotation-patch-error.txt
+          git commit -m 'chore: capture annotation patch failure'
+          git push origin HEAD:feat/reader-annotations-v2
+          exit 1
 
       - name: Validate source
+        if: steps.apply_patch.outputs.status == '0'
         shell: bash
         run: |
           git diff --check
@@ -37,8 +64,11 @@ jobs:
           grep -q '全文笔记' index.html
 
       - name: Commit feature branch
+        if: steps.apply_patch.outputs.status == '0'
         shell: bash
         run: |
+          rm -f annotation-patch.log
+          rm -f TASK_LOGS/annotation-patch-error.txt
           rm -f scripts/apply_reader_annotations.py
           rm -f .github/workflows/apply-reader-annotations.yml
           rmdir scripts 2>/dev/null || true
