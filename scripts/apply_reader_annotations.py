@@ -740,3 +740,5 @@ if missing:
     raise RuntimeError(f"missing required markers: {missing}")
 
 print("Reader annotation patch applied successfully.")
+
+# Trigger workflow after workflow file exists.
