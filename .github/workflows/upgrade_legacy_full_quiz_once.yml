@@ -1,0 +1,54 @@
+name: Upgrade legacy full quiz once
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+      - run: python scripts/one_shot_upgrade_legacy_full_quiz.py
+      - name: Validate
+        shell: bash
+        run: |
+          git diff --check
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              'normalizeQuizQuestions(fullQuizData).length >= 3',
+              'normalizeQuizQuestions(bundle.results.fullQuizData).length >= 3',
+              "fullQuizData ? '升级为3题'"
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing: raise SystemExit(missing)
+          marker = '<script type="text/babel" data-type="module">'
+          start = text.index(marker) + len(marker)
+          end = text.index('</script>', start)
+          Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
+          PY
+          npm init -y >/tmp/npm.log 2>&1
+          npm install --no-save @babel/core @babel/preset-react >>/tmp/npm.log 2>&1
+          node - <<'NODE'
+          const fs = require('fs');
+          const babel = require('@babel/core');
+          babel.transformSync(fs.readFileSync('/tmp/reader.jsx', 'utf8'), { filename: 'index.jsx', sourceType: 'module', presets: [['@babel/preset-react', { runtime: 'classic' }]] });
+          console.log('Babel JSX parse passed');
+          NODE
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: upgrade legacy full quiz caches to three questions"
+          git push origin HEAD:feat/reader-annotations-v2
