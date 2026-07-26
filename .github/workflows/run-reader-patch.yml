@@ -6,12 +6,18 @@ on:
       - main
     paths:
       - .github/workflows/run-reader-patch.yml
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: write
+  pull-requests: read
 
 jobs:
   patch-feature-branch:
+    if: github.event_name == 'push' || github.head_ref == 'feat/reader-polish-book-import'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +48,10 @@ jobs:
 
       - name: Commit feature changes
         run: |
+          if git diff --quiet -- index.html; then
+            echo 'No index.html changes to commit'
+            exit 0
+          fi
           git config user.name 'reader-improvement-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add index.html
