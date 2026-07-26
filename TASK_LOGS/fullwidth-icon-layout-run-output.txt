@@ -1,0 +1,12 @@
+patch_code=1
+diff_code=99
+static_code=99
+npm_code=99
+babel_code=99
+commit=4f9f8c19f86d97b08312f20261c48e10b8e66874
+---- patch ----
+icon button class helper: expected 1 anchor, found 0
+---- diff ----
+---- static ----
+---- npm ----
+---- babel ----
