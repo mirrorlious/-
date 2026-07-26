@@ -74,3 +74,35 @@
 - 第一次远程补丁在源码锚点检查阶段失败。
 - 第二次诊断确认问题是 Python 补丁脚本中的正则转义，原始源码未被写入或破坏。
 - 已加入转义修复步骤并更新基线工作流；第三次运行将重新执行完整补丁和静态验证。
+
+
+## 8. 实际修改
+
+- `index.html`：新增句子级批注锚点、选区工具条批注入口、右键菜单、快捷键、原文标记、Notes 双模式、编辑删除定位和本地持久化。
+- 阅读布局与右侧面板相关原型英文标签已中文化。
+- 未修改 API、OCR、PDF、Firebase 和模型路由。
+
+## 9. 数据结构
+
+`readingNotes.version = 1`，按 `currentHistoryId` 保存：
+
+- `documentNote`：全文笔记
+- `annotations[]`：`id`、`anchor`、`note`、`createdAt`、`updatedAt`
+- `anchor`：`paragraphIndex`、`startOffset`、`endOffset`、`exact`、`prefix`、`suffix`
+
+批注默认只保存到现有 `localStorage` 状态，不同步 Firebase。
+
+## 10. 验证
+
+- 补丁脚本要求所有源码锚点唯一匹配，否则立即失败。
+- GitHub Actions 执行后将运行：
+  - Python 补丁脚本
+  - `git diff --check`
+  - 源码关键标记检查
+- 仍需用户在浏览器手工验证：鼠标选区、右键、快捷键、刷新持久化、批注定位和夜间模式。
+
+## 11. 当前状态
+
+状态：远程实现完成，等待分支部署或本地手工验收。
+
+GitHub：已按用户明确授权修改 `feat/reader-annotations-v2`，未合并 `main`。
