@@ -3633,7 +3633,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                     if (bundle.results.fullMapData) job.skippedModules += 1;
                                     else bundle.results.fullMapData = await callGeminiSummary(getModelSafeText(sourceText, 30000, '批量结构树'), apiConfig);
                                 } else if (module === 'quiz') {
-                                    if (bundle.results.fullQuizData) job.skippedModules += 1;
+                                    if (normalizeQuizQuestions(bundle.results.fullQuizData).length >= 3) job.skippedModules += 1;
                                     else bundle.results.fullQuizData = await callGeminiFullQuiz(getModelSafeText(sourceText, 18000, '批量全文练习'), apiConfig);
                                 }
                                 bundle.article.updatedAt = Date.now();
@@ -4359,7 +4359,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const handleFullQuizTool = async () => {
                 setIsFullTextMenuOpen(false);
                 openRightPanelTab('analysis');
-                if (fullQuizData) {
+                if (normalizeQuizQuestions(fullQuizData).length >= 3) {
                     setRightPanelAnalysis({ kind: 'document-quiz', title: '全文练习', data: fullQuizData, createdAt: Date.now() });
                     return fullQuizData;
                 }
@@ -4973,7 +4973,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                         <button role="menuitem" onClick={handleFullTranslationTool} disabled={isFullTransLoading} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><span>全文翻译</span><span className="text-[10px] text-gray-400">{isFullTransLoading ? '处理中' : fullTranslations.length ? '已有结果' : '调用模型'}</span></button>
                                                         <button role="menuitem" onClick={handleFullLogicTool} disabled={isGlobalLogicLoading} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><span>全文逻辑</span><span className="text-[10px] text-gray-400">{isGlobalLogicLoading ? '分析中' : globalLogicData ? '已有结果' : '调用模型'}</span></button>
                                                         <button role="menuitem" onClick={handleFullOutlineTool} disabled={isAnalyzingMap} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><span>全文结构 / 思维导图</span><span className="text-[10px] text-gray-400">{isAnalyzingMap ? '生成中' : fullMapData ? '已有结果' : '调用模型'}</span></button>
-                                                        <button role="menuitem" onClick={handleFullQuizTool} disabled={isFullQuizLoading} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><span>全文练习</span><span className="text-[10px] text-gray-400">{isFullQuizLoading ? '生成中' : fullQuizData ? '已有结果' : '调用模型'}</span></button>
+                                                        <button role="menuitem" onClick={handleFullQuizTool} disabled={isFullQuizLoading} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><span>全文练习</span><span className="text-[10px] text-gray-400">{isFullQuizLoading ? '生成中' : normalizeQuizQuestions(fullQuizData).length >= 3 ? '已有3题' : fullQuizData ? '升级为3题' : '调用模型'}</span></button>
                                                         <div className="my-1 border-t border-gray-100 dark:border-gray-800"></div>
                                                         <button role="menuitem" onClick={handleFullNotesTool} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"><span>学习笔记</span><span className="text-[10px] text-gray-400">{currentAnnotations.length} 条批注</span></button>
                                                         <button role="menuitem" onClick={downloadCurrentArticleMarkdown} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"><span>下载 Markdown</span><span className="text-[10px] text-gray-400">完整备份</span></button>
