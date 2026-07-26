@@ -1,5 +1,6 @@
 name: Add portable article bundles and batch analysis once
 
+# Registered trigger for the one-shot reader migration.
 on:
   push:
     branches:
