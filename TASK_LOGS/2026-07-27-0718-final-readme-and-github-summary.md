@@ -2,7 +2,7 @@
 
 - 时间：2026-07-27
 - 执行者：ChatGPT
-- 状态：已完成
+- 状态：验证中
 - 本地路径：`D:\01_project\杨的阅读器`
 - GitHub 上传：是，用户明确要求汇总推送到 GitHub
 
@@ -67,8 +67,6 @@
 - 增加 Mermaid 批量解析数据流图。
 - 增加 `<kbd>`、代码块、折叠详情和验收徽章，形成不同字号、信息密度与背景块。
 - 明确 README 中的功能与当前验收版本一致，并保留“不自动合并 main”的发布边界。
-- 更新 PR #8 汇总描述，记录浏览器验收完成和 README 重写结果。
-- 将 PR #8 从 Draft 转为 Ready for review；未执行合并。
 
 ## 9. 数据与配置迁移
 
@@ -95,6 +93,7 @@
 
 ## 12. 未完成项
 
+- PR 状态更新尚待执行。
 - PR 尚未合并到 base 分支或 `main`；合并属于独立发布动作。
 - 仓库默认首页只有在包含本 README 的分支成为默认展示分支或相关 PR 合并后才会同步显示新版内容。
 
@@ -104,4 +103,4 @@
 
 ## 14. 最终结论
 
-README 与 GitHub 汇总已完成并推送到 `feat/reader-annotations-v2`。PR #8 已进入 Ready for review 状态，等待独立的合并或发布决定。
+README 已完成并推送到 `feat/reader-annotations-v2`。PR 汇总和 Ready for review 状态正在收尾。
