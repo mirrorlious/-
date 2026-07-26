@@ -77,6 +77,48 @@
         .rounded-md {
             border-radius: 3px !important;
         }
+
+        .reader-workspace {
+            display: block;
+            min-width: 0;
+        }
+
+        .reader-workspace-split {
+            display: grid;
+            grid-template-columns: minmax(0, 58fr) minmax(380px, 42fr);
+            gap: 24px;
+            align-items: start;
+        }
+
+        .reader-main-column,
+        .reader-side-panel {
+            min-width: 0;
+        }
+
+        .reader-side-panel {
+            position: sticky;
+            top: 80px;
+            max-height: calc(100vh - 104px);
+            overflow: auto;
+        }
+
+        @media (max-width: 1199px) {
+            .reader-workspace-split {
+                display: block;
+            }
+
+            .reader-side-panel {
+                position: static;
+                max-height: none;
+                margin-top: 24px;
+            }
+        }
+
+        @media (max-width: 899px) {
+            .reader-workspace {
+                display: block;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans dark:bg-gray-950 dark:text-gray-100 transition-colors duration-300">
@@ -2492,7 +2534,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                             </div>
                         </header>
 
-                        <main className={`${isPdfMode ? 'max-w-[1400px] sm:my-4' : 'max-w-3xl sm:my-8'} mx-auto bg-white dark:bg-gray-900 sm:border border-gray-200 dark:border-gray-800 sm:rounded-sm min-h-[85vh] transition-colors overflow-hidden`}>
+                        <main className={`${isPdfMode ? 'max-w-[1400px] sm:my-4' : layoutMode === 'split' ? 'max-w-[1480px] sm:my-8' : layoutMode === 'focus' ? 'max-w-[1120px] sm:my-8' : 'max-w-[1200px] sm:my-8'} mx-auto bg-white dark:bg-gray-900 sm:border border-gray-200 dark:border-gray-800 sm:rounded-sm min-h-[85vh] transition-colors overflow-hidden`}>
                             {isPdfMode && pdfFile ? (
                                 <PdfReader file={pdfFile} onClose={closePdfReader} onExtract={extractCurrentPdf} isExtractingText={isExtracting} extractionProgress={pdfExtractionProgress} />
                             ) : !isReadingMode ? (
@@ -2518,11 +2560,20 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                     </div>
                                 </div>
                             ) : (
-                                <article className="py-8 animate-fade-in relative transition-all" style={{ paddingLeft: `${typographyConfig.paddingX}%`, paddingRight: `${typographyConfig.paddingX}%` }}>
+                                <div className={`reader-workspace ${layoutMode === 'split' && rightPanelOpen ? 'reader-workspace-split' : ''}`} style={layoutMode === 'split' && rightPanelOpen ? { gridTemplateColumns: `minmax(0, ${splitRatio}fr) minmax(380px, ${100 - splitRatio}fr)` } : undefined}>
+                                <article className="reader-main-column py-8 animate-fade-in relative transition-all" style={{ paddingLeft: `${typographyConfig.paddingX}%`, paddingRight: `${typographyConfig.paddingX}%` }}>
                                     <div className="sticky top-16 z-30 -mx-2 sm:mx-0 mb-8 px-2 sm:px-0 py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur flex flex-col sm:flex-row sm:justify-center sm:items-center gap-2 sm:gap-3">
                                         <div className="w-full sm:w-auto bg-gray-100 dark:bg-gray-800 p-1 rounded-sm flex gap-1 border border-gray-200 dark:border-gray-700">
                                             <button onClick={() => setReadingMode('pure')} className={`flex-1 sm:flex-none min-h-[40px] px-4 sm:px-5 rounded-[2px] whitespace-nowrap text-[13px] font-medium transition-all ${readingMode === 'pure' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>纯净阅读</button>
                                             <button onClick={() => setReadingMode('intensive')} className={`flex-1 sm:flex-none min-h-[40px] px-4 sm:px-5 rounded-[2px] whitespace-nowrap text-[13px] font-medium transition-all ${readingMode === 'intensive' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>深度精读</button>
+                                        </div>
+
+                                        <div className="w-full sm:w-auto flex flex-wrap items-center justify-center gap-1 bg-gray-50 dark:bg-gray-800/70 p-1 rounded-sm border border-gray-200 dark:border-gray-700">
+                                            {['standard', 'split', 'focus'].map((mode) => (
+                                                <button key={mode} onClick={() => setLayoutMode(mode)} className={`min-h-[36px] px-3 rounded-[2px] text-[12px] font-medium transition-all ${layoutMode === mode ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>{mode}</button>
+                                            ))}
+                                            <button onClick={() => setRightPanelOpen(previous => !previous)} disabled={layoutMode !== 'split'} className="min-h-[36px] px-3 rounded-[2px] text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">{rightPanelOpen ? 'Hide panel' : 'Show panel'}</button>
+                                            <button onClick={toggleBrowserFullscreen} className="min-h-[36px] px-3 rounded-[2px] text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700">{isBrowserFullscreen ? 'Exit fullscreen' : 'Fullscreen'}</button>
                                         </div>
                                         
                                         {readingMode === 'intensive' && (
@@ -2609,6 +2660,24 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                         )}
                                     </div>
                                 </article>
+                                {layoutMode === 'split' && rightPanelOpen && (
+                                    <aside className="reader-side-panel px-4 pb-8 sm:px-0 sm:pr-6" aria-label="Reader learning panel">
+                                        <div className="border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-950/30 rounded-sm overflow-hidden">
+                                            <div className="flex items-center gap-1 p-2 border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80">
+                                                {['outline', 'analysis', 'notes'].map((tab) => (
+                                                    <button key={tab} onClick={() => setRightPanelTab(tab)} aria-pressed={rightPanelTab === tab} className={`flex-1 min-h-[38px] px-2 rounded-sm text-[12px] font-medium ${rightPanelTab === tab ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{tab}</button>
+                                                ))}
+                                                <button onClick={() => setRightPanelOpen(false)} aria-label="Close panel" className="w-8 h-8 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">×</button>
+                                            </div>
+                                            <div className="p-4 text-[13px] text-gray-700 dark:text-gray-300">
+                                                {rightPanelTab === 'outline' && (fullMapData?.mindmap ? <LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode="bilingual" collapsedNodes={collapsedMapNodes} onToggle={toggleMapNode} /> : <p className="text-gray-400 dark:text-gray-500">Generate the outline from the reader actions.</p>)}
+                                                {rightPanelTab === 'analysis' && (globalLogicData ? <div className="space-y-3"><h3 className="font-semibold text-gray-900 dark:text-gray-100">Analysis</h3><p className="leading-relaxed">{globalLogicData.coreMeaning}</p><p className="text-gray-500 dark:text-gray-400">{globalLogicData.logicalStructure}</p></div> : <p className="text-gray-400 dark:text-gray-500">Run full-text analysis to see results here.</p>)}
+                                                {rightPanelTab === 'notes' && <textarea className="w-full min-h-[260px] resize-y bg-transparent border border-gray-200 dark:border-gray-700 p-3 outline-none focus:border-gray-500" placeholder="Write local reading notes..." />}
+                                            </div>
+                                        </div>
+                                    </aside>
+                                )}
+                                </div>
                             )}
                         </main>
 

@@ -71,3 +71,12 @@
 按阶段使用本地提交回滚；不执行远程操作，不改写远程历史。
 
 GitHub：未上传，等待用户本地验收。
+## 8. Stage 2: Desktop split layout and right panel
+
+- Status: implemented locally; later-stage integration remains.
+- Added layout-aware main widths, a 58/42 desktop split grid, a sticky and internally scrollable side panel, and single-column fallback below 1200px.
+- Added outline, analysis, and notes tabs, plus layout mode, panel toggle, and browser fullscreen controls.
+- Local validation: `http://localhost:5173/?stage=2` loaded successfully; sample reading rendered with the three layout buttons and `Reader learning panel`.
+- `git diff --check` passed.
+- Known limitation: the stage-2 control labels are temporary English labels; draggable divider, selection toolbar, and request deduplication remain for later stages.
+- Next: complete standard/split/focus behavior in stage 3, then refine immersive/fullscreen behavior.
