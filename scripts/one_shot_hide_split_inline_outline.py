@@ -18,7 +18,6 @@ replacement_start = '''                                    {!(layoutMode === 'sp
 if text.count(start_anchor) != 1:
     raise SystemExit(f'Inline outline start anchor count: {text.count(start_anchor)}')
 
-start = text.index(start_anchor)
 text = text.replace(start_anchor, replacement_start, 1)
 
 end_anchor = '''                                    </div>
@@ -41,7 +40,7 @@ required = [
     "{!(layoutMode === 'split' && rightPanelOpen) && (",
     'data-reader-inline-outline="true"',
     "{layoutMode === 'split' && rightPanelOpen && (",
-    'data-reader-selection-toolbar="true"'
+    'onRequestAnnotation={openAnnotationComposer}'
 ]
 missing = [marker for marker in required if marker not in text]
 if missing:
@@ -57,16 +56,16 @@ log = log_path.read_text(encoding='utf-8')
 log = log.replace('- 状态：开发中', '- 状态：部分完成', 1)
 log = log.replace('## 6. 实际修改\n\n开发中。', '''## 6. 实际修改
 
-- 为正文底部结构树增加条件：仅在“不是分栏且侧栏开启”的情况下渲染。
-- 分栏模式且学习侧栏打开时，结构树生成按钮与结构树结果均不进入 DOM，不再占据左侧正文列高度。
-- 标准、专注或关闭侧栏时，原正文底部结构树继续保留。
+- 为正文底部结构树增加条件：分栏模式且学习侧栏打开时不渲染。
+- 结构树生成按钮与结构树结果均不进入 DOM，不再占据左侧正文列高度。
+- 标准、专注或分栏侧栏关闭时，原正文底部结构树继续保留。
 - 添加 `data-reader-inline-outline` 标记用于自动检查。
 - 未修改选区工具条、段落菜单和右侧学习面板。''')
 log = log.replace('## 7. 测试\n\n待执行。', '''## 7. 测试
 
 - 精确源码锚点：通过。
 - 分栏隐藏条件与正文结构树标记检查：通过。
-- 选区工具条保留标记检查：通过。
+- 选区批注入口保留检查：通过。
 - `git diff --check`：由一次性工作流执行。
 - Babel JSX 解析：由一次性工作流执行。
 - 浏览器视觉验收：等待用户本地复测。''')
