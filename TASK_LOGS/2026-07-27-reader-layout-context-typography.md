@@ -89,3 +89,11 @@ GitHub：未上传，等待用户本地验收。
 - Focus mode uses a narrower centered reading column and hides the learning panel.
 - Validation: browser interaction switched focus -> split; focus had no side panel, split restored the side panel and layout controls.
 - Next: refine immersive mode and browser fullscreen behavior in stage 4.
+
+## 10. Stage 4: Immersive and browser fullscreen
+
+- Status: completed locally.
+- Immersive mode now hides the global header and can be toggled without persisting the temporary state.
+- Browser fullscreen uses `requestFullscreen`, `exitFullscreen`, and `fullscreenchange`; unsupported or failed calls fall back to immersive mode.
+- Validation: browser interaction confirmed immersive mode hides the header and the exit action restores it.
+- Next: implement paragraph-level lightweight entry and action menu in stage 5.
