@@ -1076,8 +1076,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const textRef = useRef(null);
 
             const isConsideredParagraph = text.split(/\s+/).filter(Boolean).length >= 15 && /[.,:;]/.test(text);
-            const isPanelOpen = showTranslation || showAnalysis || showQuiz || !!activeNote || isTransLoading || isLocalTransLoading || isAnalysisLoading || isAudioLoading || isQuizLoading || !!audioUrl;
-            const showActions = isInteracting || isPanelOpen;
+            const hasParagraphResult = showTranslation || showAnalysis || showQuiz || !!activeNote || !!audioUrl;
 
             useEffect(() => {
                 const updateSelection = () => {
@@ -1165,9 +1164,9 @@ ${JSON.stringify(miniCorpus, null, 2)}
             }, [contextMenu]);
 
             useEffect(() => {
-                if (!showActions) return undefined;
+                if (!isInteracting) return undefined;
                 const closeMenu = (event) => {
-                    if (!event.target.closest('[data-reader-paragraph]')) setIsInteracting(false);
+                    if (!paragraphRef.current?.contains(event.target)) setIsInteracting(false);
                 };
                 const handleKeyDown = (event) => {
                     if (event.key === 'Escape') setIsInteracting(false);
@@ -1178,11 +1177,28 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     document.removeEventListener('pointerdown', closeMenu);
                     document.removeEventListener('keydown', handleKeyDown);
                 };
-            }, [showActions]);
+            }, [isInteracting]);
 
-            const handleParagraphClick = (e) => {
-                if (window.getSelection() && window.getSelection().toString().length > 0) return;
-                if (!isPanelOpen) setIsInteracting(prev => !prev);
+            const toggleParagraphMenu = (event) => {
+                event.stopPropagation();
+                setIsInteracting(previous => !previous);
+            };
+
+            const runParagraphAction = (handler) => (event) => {
+                handler(event);
+                setIsInteracting(false);
+            };
+
+            const handleCopyParagraph = async (event) => {
+                event.stopPropagation();
+                try {
+                    await navigator.clipboard?.writeText(text);
+                    window.showToast('本段已复制', 'success');
+                } catch (error) {
+                    window.showToast('复制失败，请手动选择文字复制', 'warning');
+                } finally {
+                    setIsInteracting(false);
+                }
             };
 
             const phraseRegex = useMemo(() => {
@@ -1452,15 +1468,12 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         ref={paragraphRef}
                         data-reader-paragraph="true"
                     className="mb-14 relative group"
-                    onMouseEnter={() => setIsInteracting(true)}
-                    onMouseLeave={() => setIsInteracting(false)}
                 >
                     <div
                         ref={textRef}
                         data-reader-text="true"
                         className="text-gray-900 dark:text-gray-200 text-left break-words relative z-10 transition-all cursor-text"
                         style={{ fontFamily: typographyConfig.readingFontFamily || typographyConfig.fontFamily, fontSize: `${typographyConfig.fontSize}px`, lineHeight: typographyConfig.lineHeight, marginBottom: `${typographyConfig.paragraphSpacing || 1.05}em` }}
-                        onClick={handleParagraphClick}
                         onContextMenu={handleSelectionContextMenu}
                     >
                         {offsetTextSegments.map((seg, segmentIndex) => (
@@ -1513,16 +1526,55 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                     {selectionTranslation && selectedText && <div className="mt-3 border-l-2 border-blue-400 pl-3 text-[13px] text-gray-700 dark:text-gray-300">{selectionTranslation}</div>}
 
-                    {!showActions && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); setIsInteracting(true); }}
-                            aria-expanded={showActions}
-                            className="mt-2 ml-auto w-fit flex items-center gap-1.5 min-h-[36px] px-2 text-[12px] font-medium text-slate-400 hover:text-sky-700 dark:hover:text-sky-300 transition-colors md:opacity-0 md:group-hover:opacity-100 focus:opacity-100"
-                            aria-label="展开本段阅读工具"
+                    <button
+                        type="button"
+                        data-reader-paragraph-trigger="true"
+                        onClick={toggleParagraphMenu}
+                        aria-haspopup="menu"
+                        aria-expanded={isInteracting}
+                        aria-label={`打开第 ${paragraphIndex + 1} 段工具`}
+                        title="本段工具"
+                        className={`absolute top-0 right-0 md:-right-11 z-30 w-9 h-9 grid place-items-center rounded-sm border bg-white/95 dark:bg-gray-800/95 shadow-sm text-gray-500 dark:text-gray-400 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${isInteracting ? 'opacity-100 border-sky-300 text-sky-700 dark:text-sky-300 dark:border-sky-700' : 'opacity-100 md:opacity-30 border-gray-200 dark:border-gray-700 md:group-hover:opacity-100 hover:text-sky-700 hover:border-sky-200 dark:hover:text-sky-300'}`}
+                    >
+                        <span aria-hidden="true" className="text-lg leading-none -mt-1">⋯</span>
+                        {hasParagraphResult && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-sky-500" aria-label="本段已有学习结果"></span>}
+                    </button>
+
+                    {isInteracting && (
+                        <div
+                            data-reader-paragraph-menu="true"
+                            role="menu"
+                            aria-label={`第 ${paragraphIndex + 1} 段工具`}
+                            className="absolute top-10 right-0 md:-right-2 z-40 w-60 overflow-hidden rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-850 shadow-xl animate-fade-in-down"
+                            onClick={(event) => event.stopPropagation()}
                         >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 15l6-6 6 6"></path></svg>
-                            <span>展开本段工具</span>
-                        </button>
+                            <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 text-[11px] text-gray-400 dark:text-gray-500">第 {paragraphIndex + 1} 段 · 本段工具</div>
+                            <div className="p-1.5">
+                                <button role="menuitem" onClick={runParagraphAction(handleToggleTrans)} disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
+                                    <span>{showTranslation ? '收起段落翻译' : '翻译本段'}</span>
+                                    {(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? <span className="text-[10px] text-gray-400">处理中</span> : showTranslation ? <span className="text-sky-600">✓</span> : null}
+                                </button>
+                                <button role="menuitem" onClick={runParagraphAction(handleToggleAnalysis)} disabled={!isConsideredParagraph || isAnalysisLoading} title={!isConsideredParagraph ? '当前段落较短，暂无复杂句式' : ''} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-45 disabled:cursor-not-allowed">
+                                    <span>{showAnalysis ? '收起长难句拆解' : '长难句拆解'}</span>
+                                    {isAnalysisLoading ? <span className="text-[10px] text-gray-400">解构中</span> : showAnalysis ? <span className="text-amber-600">✓</span> : !isConsideredParagraph ? <span className="text-[10px] text-gray-400">本段较短</span> : null}
+                                </button>
+                                <div className="my-1 border-t border-gray-100 dark:border-gray-700"></div>
+                                <button role="menuitem" onClick={runParagraphAction(handleLocalSpeech)} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                    <span>本地朗读</span><span className="text-[10px] text-gray-400">免费</span>
+                                </button>
+                                <button role="menuitem" onClick={runParagraphAction(handleToggleAudio)} disabled={isAudioLoading || !!audioUrl} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50">
+                                    <span>{audioUrl ? '外教领读已生成' : '外教领读'}</span>
+                                    {isAudioLoading ? <span className="text-[10px] text-gray-400">请求中</span> : audioUrl ? <span className="text-blue-600">✓</span> : <span className="text-[10px] text-gray-400">调用模型</span>}
+                                </button>
+                                <button role="menuitem" onClick={runParagraphAction(handleToggleQuiz)} disabled={!isConsideredParagraph || isQuizLoading} title={!isConsideredParagraph ? '当前内容不足以生成有效练习' : ''} className="w-full min-h-[40px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-45 disabled:cursor-not-allowed">
+                                    <span>{showQuiz ? '收起段落练习' : '生成练习'}</span>
+                                    {isQuizLoading ? <span className="text-[10px] text-gray-400">生成中</span> : showQuiz ? <span className="text-violet-600">✓</span> : !isConsideredParagraph ? <span className="text-[10px] text-gray-400">内容不足</span> : null}
+                                </button>
+                                <div className="my-1 border-t border-gray-100 dark:border-gray-700"></div>
+                                <button role="menuitem" onClick={handleCopyParagraph} className="w-full min-h-[40px] px-3 rounded-sm text-left text-[13px] text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">复制段落</button>
+                            </div>
+                            {!isConsideredParagraph && <div className="px-3 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-[10px] leading-relaxed text-gray-400">本段较短，翻译、朗读和复制仍可使用；长难句与练习暂不建议生成。</div>}
+                        </div>
                     )}
 
                     {activeNote && (
@@ -1547,40 +1599,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         </div>
                     )}
 
-                    <div role="menu" aria-label="Paragraph actions" className={`w-full flex flex-wrap items-center justify-end gap-2 transition-all duration-300 ease-in-out overflow-hidden origin-top ${showActions ? 'max-h-[150px] opacity-100 mt-4 scale-y-100' : 'max-h-0 opacity-0 mt-0 scale-y-95 pointer-events-none'}`}>
-                        <button 
-                            onClick={handleToggleTrans} 
-                            disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow} 
-                            className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all ${showTranslation ? 'bg-gray-800 dark:bg-gray-700 text-white border-gray-800 dark:border-gray-600' : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'}`}
-                        >
-                            <span className="font-serif italic text-[11px]">文A</span>
-                            <span>{(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? "处理中..." : showTranslation ? "收起精翻" : "展开精翻"}</span>
-                        </button>
 
-                        {isConsideredParagraph && (
-                            <button onClick={handleToggleAnalysis} disabled={isAnalysisLoading} className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all ${showAnalysis ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800' : 'bg-white dark:bg-gray-800 text-amber-700 dark:text-amber-500 border-amber-200 dark:border-gray-700 hover:bg-amber-50 dark:hover:bg-gray-700'}`}>
-                                {isAnalysisLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2-1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>}
-                                <span>{isAnalysisLoading ? "智能解构中..." : showAnalysis ? "收起句法" : "长难句解构"}</span>
-                            </button>
-                        )}
-                        {!audioUrl && isConsideredParagraph && (
-                             <button onClick={handleLocalSpeech} className="min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all bg-white dark:bg-gray-800 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-gray-700 hover:bg-emerald-50 dark:hover:bg-gray-700">
-                                 <span>本地朗读</span>
-                             </button>
-                        )}
-                        {!audioUrl && isConsideredParagraph && (
-                             <button onClick={handleToggleAudio} disabled={isAudioLoading} className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-gray-700 hover:bg-blue-50 dark:hover:bg-gray-700`}>
-                                {isAudioLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <span>🎙️</span> }
-                                <span>{isAudioLoading ? "音频请求中..." : "外教领读"}</span>
-                             </button>
-                        )}
-                        {isConsideredParagraph && (
-                             <button onClick={handleToggleQuiz} disabled={isQuizLoading} className={`min-h-[40px] flex items-center gap-1.5 text-[12px] font-medium border px-3 rounded-md transition-all ${showQuiz ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800' : 'bg-white dark:bg-gray-800 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-gray-700 hover:bg-purple-50 dark:hover:bg-gray-700'}`}>
-                                {isQuizLoading ? <svg className="animate-spin w-3 h-3 loader-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <span>📝</span> }
-                                <span>{isQuizLoading ? "预测中..." : showQuiz ? "收起模拟题" : "出题测试"}</span>
-                             </button>
-                        )}
-                    </div>
 
                     {audioUrl && <div className="mt-3 animate-fade-in-down w-full max-w-sm"><audio src={audioUrl} controls className="h-9 w-full rounded-full" autoPlay /></div>}
                     
