@@ -261,20 +261,57 @@
         // ==========================================
         // 2. 超强抗并发多协议 API 引擎
         // ==========================================
-        const getEndpoint = (config, isTTS = false) => {
-            const key = config?.key || window.apiKey; 
-            let baseUrl = config?.baseUrl || "https://generativelanguage.googleapis.com";
-            baseUrl = baseUrl.replace(/\/+$/, ""); 
-            
-            if (isTTS) {
-                return `${baseUrl}/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`;
+        const CURRENT_GEMINI_TEXT_MODEL = "gemini-3.5-flash";
+        const CURRENT_GEMINI_TTS_MODEL = "gemini-3.1-flash-tts-preview";
+        const RETIRED_GEMINI_MODELS = new Set([
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-001",
+            "gemini-2.0-flash-lite",
+            "gemini-2.0-flash-lite-001"
+        ]);
+
+        const normalizeApiConfig = (config = {}) => {
+            const normalized = { ...config };
+            if ((normalized.apiType || "gemini") === "gemini" && RETIRED_GEMINI_MODELS.has((normalized.model || "").trim().toLowerCase())) {
+                normalized.model = CURRENT_GEMINI_TEXT_MODEL;
+            }
+            return normalized;
+        };
+
+        const buildGeminiEndpoint = (config, model) => {
+            const key = config?.key || window.apiKey || "";
+            const apiVersion = config?.apiVersion || "v1beta";
+            let baseUrl = (config?.baseUrl || "https://generativelanguage.googleapis.com").trim().replace(/\/+$/, "");
+            let endpoint;
+
+            if (/:generateContent(?:\?.*)?$/i.test(baseUrl)) {
+                endpoint = baseUrl.replace(/(\/models\/)[^/:?]+(:generateContent)/i, `$1${model}$2`);
+            } else if (/\/models\/[^/]+$/i.test(baseUrl)) {
+                endpoint = `${baseUrl}:generateContent`;
+            } else if (/\/models$/i.test(baseUrl)) {
+                endpoint = `${baseUrl}/${model}:generateContent`;
+            } else if (/\/v1(?:beta|alpha)?$/i.test(baseUrl)) {
+                endpoint = `${baseUrl}/models/${model}:generateContent`;
+            } else {
+                endpoint = `${baseUrl}/${apiVersion}/models/${model}:generateContent`;
             }
 
-            const rawModel = config?.model || "gemini-2.5-flash-preview-09-2025";
-            const cleanModel = rawModel.trim().toLowerCase().replace(/\s+/g, '-');
-            const apiVersion = config?.apiVersion || "v1beta";
+            if (key && !/[?&]key=/i.test(endpoint)) {
+                endpoint += `${endpoint.includes("?") ? "&" : "?"}key=${encodeURIComponent(key)}`;
+            }
+            return endpoint;
+        };
 
-            return `${baseUrl}/${apiVersion}/models/${cleanModel}:generateContent?key=${key}`;
+        const buildOpenAIEndpoint = (baseUrl) => {
+            const normalized = (baseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1").trim().replace(/\/+$/, "");
+            return /\/chat\/completions$/i.test(normalized) ? normalized : `${normalized}/chat/completions`;
+        };
+
+        const getEndpoint = (config, isTTS = false) => {
+            const normalized = normalizeApiConfig(config);
+            const rawModel = isTTS ? CURRENT_GEMINI_TTS_MODEL : (normalized.model || CURRENT_GEMINI_TEXT_MODEL);
+            const cleanModel = rawModel.trim().toLowerCase().replace(/\s+/g, '-');
+            return buildGeminiEndpoint(normalized, cleanModel);
         };
 
         const fetchWithRetry = async (url, options, retries = 5) => {
@@ -283,6 +320,13 @@
                 try {
                     const response = await fetch(url, options);
                     if (!response.ok) {
+                        const errorText = await response.text();
+                        let errorMsg = errorText;
+                        try {
+                            const errObj = JSON.parse(errorText);
+                            errorMsg = errObj.error?.message || errObj.message || errorText;
+                        } catch(e) {}
+                        errorMsg = String(errorMsg || "未知请求错误").replace(/\s+/g, " ").trim().slice(0, 240);
                         if (response.status === 404) {
                             throw new Error(`模型不存在 (HTTP 404)。请确保模型名称填写正确`);
                         }
@@ -290,14 +334,8 @@
                             throw new Error(`API 密钥无效或未授权 (HTTP ${response.status})。`);
                         }
                         if (response.status === 400) {
-                            throw new Error(`请求被拒绝 (HTTP 400)。可能代理接口格式不兼容。`);
+                            throw new Error(`请求被拒绝 (HTTP 400)：${errorMsg}`);
                         }
-                        const errorText = await response.text();
-                        let errorMsg = errorText;
-                        try {
-                            const errObj = JSON.parse(errorText);
-                            if (errObj.error && errObj.error.message) errorMsg = errObj.error.message;
-                        } catch(e){}
                         const err = new Error(`HTTP ${response.status}: ${errorMsg}`);
                         err.status = response.status;
                         throw err;
@@ -322,14 +360,14 @@
         };
 
         const callLLM = async (prompt, apiConfig, isJson = false) => {
-            const type = apiConfig?.apiType || 'gemini';
-            const key = apiConfig?.key || window.apiKey;
+            const normalizedConfig = normalizeApiConfig(apiConfig);
+            const type = normalizedConfig?.apiType || 'gemini';
+            const key = normalizedConfig?.key || window.apiKey;
             
             if (type === 'openai') {
-                const baseUrl = (apiConfig?.baseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1").replace(/\/+$/, "");
-                const endpoint = `${baseUrl}/chat/completions`;
+                const endpoint = buildOpenAIEndpoint(normalizedConfig?.baseUrl);
                 const payload = {
-                    model: apiConfig?.model || "qwen-plus",
+                    model: normalizedConfig?.model || "qwen-plus",
                     messages: [{ role: "user", content: prompt }]
                 };
                 const result = await fetchWithRetry(endpoint, {
@@ -342,7 +380,7 @@
                 if (isJson) return window.safeParseJSON(text);
                 return text.trim();
             } else {
-                const endpoint = getEndpoint(apiConfig);
+                const endpoint = getEndpoint(normalizedConfig);
                 const payload = { contents: [{ parts: [{ text: prompt }] }] };
                 const result = await fetchWithRetry(endpoint, {
                     method: 'POST',
@@ -496,16 +534,33 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
         const extractTextFromMedia = async (base64Data, mimeType, apiConfig) => {
             const prompt = "Extract English text accurately. CRITICAL: Fix physical line breaks mid-sentence so paragraphs are continuous. Separate different paragraphs with double newlines strictly. Output ONLY the English text.";
-            const type = apiConfig?.apiType || 'gemini';
-            const key = apiConfig?.key || window.apiKey;
-            let baseUrl = (apiConfig?.baseUrl || "https://generativelanguage.googleapis.com").replace(/\/+$/, "");
-            const model = "gemini-2.5-flash"; 
-            const endpoint = `${baseUrl}/v1beta/models/${model}:generateContent?key=${key}`;
-            
-            const result = await fetchWithRetry(endpoint, {
+            const normalizedConfig = normalizeApiConfig(apiConfig);
+            const type = normalizedConfig?.apiType || 'gemini';
+
+            if (type === 'openai') {
+                const result = await fetchWithRetry(buildOpenAIEndpoint(normalizedConfig.baseUrl), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${normalizedConfig.key || window.apiKey}` },
+                    body: JSON.stringify({
+                        model: normalizedConfig.model || "qwen-plus",
+                        messages: [{
+                            role: "user",
+                            content: [
+                                { type: "text", text: prompt },
+                                { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Data}` } }
+                            ]
+                        }]
+                    })
+                });
+                const text = result.choices?.[0]?.message?.content;
+                if (!text) throw new Error("OpenAI 兼容接口未返回有效内容");
+                return text.replace(/(?<!\n)\n(?!\n)/g, ' ');
+            }
+
+            const result = await fetchWithRetry(getEndpoint(normalizedConfig), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [ { text: prompt }, { inlineData: { mimeType: mimeType, data: base64Data } } ] }] })
+                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType, data: base64Data } }] }] })
             });
             return getCandidateText(result).replace(/(?<!\n)\n(?!\n)/g, ' ');
         };
@@ -750,7 +805,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 
                 setIsLocalTransLoading(true); 
                 try {
-                    const trans = await callGeminiTranslation(text, apiConfig);
+                    const trans = await callGeminiTranslation(getModelSafeText(text, 12000, "段落精翻"), apiConfig);
                     setLocalTranslation(trans);
                     setShowTranslation(true);
                 } catch (e) {
@@ -767,7 +822,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                 setIsAnalysisLoading(true); 
                 try {
-                    const data = await callGeminiIntensiveAnalysis(text, apiConfig);
+                    const data = await callGeminiIntensiveAnalysis(getModelSafeText(text, 10000, "长难句解构"), apiConfig);
                     setAnalysisData(data);
                     setShowAnalysis(true);
                 } catch (e) {
@@ -782,7 +837,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 if (audioUrl) return; 
                 setIsAudioLoading(true); 
                 try {
-                    const url = await callGeminiTTS(text, apiConfig);
+                    const url = await callGeminiTTS(getModelSafeText(text, 4000, "外教领读"), apiConfig);
                     setAudioUrl(url); 
                 } catch (e) {
                     window.showToast(`语音合成异常: ${e.message}`, "error");
@@ -798,7 +853,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                 setIsQuizLoading(true); 
                 try {
-                    const data = await callGeminiQuiz(text, apiConfig);
+                    const data = await callGeminiQuiz(getModelSafeText(text, 8000, "出题测试"), apiConfig);
                     setQuizData(data); 
                     setShowQuiz(true);
                 } catch (e) {
@@ -1209,12 +1264,131 @@ ${JSON.stringify(miniCorpus, null, 2)}
             );
         };
 
-        const DEFAULT_API_CONFIG = { apiType: 'gemini', key: '', model: 'gemini-2.0-flash', baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta' };
+        const DEFAULT_API_CONFIG = { apiType: 'gemini', key: '', model: CURRENT_GEMINI_TEXT_MODEL, baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta' };
         const DEFAULT_TYPOGRAPHY_CONFIG = { fontFamily: '"Noto Serif SC", STSong, "Times New Roman", serif', fontSize: 17, lineHeight: 1.9, paddingX: 6, theme: 'light' };
         const LOCAL_STORAGE_KEY = 'yang-reader-state-v1';
         const formatFileSize = (bytes) => {
             if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
             return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        };
+
+        const median = (values) => {
+            const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+            if (sorted.length === 0) return 0;
+            const middle = Math.floor(sorted.length / 2);
+            return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+        };
+
+        const cleanPdfText = (text) => text
+            .replace(/\s+/g, " ")
+            .replace(/\s+([,.;:!?%)\]}])/g, "$1")
+            .replace(/([([{])\s+/g, "$1")
+            .replace(/([A-Za-z])([’'])\s+([A-Za-z]{1,2})\b/g, "$1$2$3")
+            .trim();
+
+        const pdfItemsToLines = (items, pageWidth) => {
+            const lines = [];
+            let currentLine = null;
+
+            const flushLine = () => {
+                if (currentLine?.text?.trim()) {
+                    const text = cleanPdfText(currentLine.text);
+                    if (text) lines.push({ ...currentLine, text, width: Math.max(0, currentLine.right - currentLine.x) });
+                }
+                currentLine = null;
+            };
+
+            items.forEach(item => {
+                const rawText = typeof item.str === "string" ? item.str.trim() : "";
+                const x = Number(item.transform?.[4]) || 0;
+                const y = Number(item.transform?.[5]) || 0;
+                const fontSize = Math.max(1, Math.abs(Number(item.transform?.[3])) || Number(item.height) || 10);
+                const itemWidth = Math.max(0, Number(item.width) || 0);
+
+                if (currentLine) {
+                    const baselineChanged = Math.abs(y - currentLine.y) > Math.max(2, Math.min(fontSize, currentLine.fontSize) * 0.45);
+                    const separatedColumn = !baselineChanged && x - currentLine.right > Math.max(18, pageWidth * 0.035);
+                    if (baselineChanged || separatedColumn) flushLine();
+                }
+
+                if (rawText) {
+                    if (!currentLine) {
+                        currentLine = { text: "", x, y, right: x, fontSize };
+                    }
+                    const needsSpace = currentLine.text &&
+                        !/[\s-]$/.test(currentLine.text) &&
+                        !/^[,.;:!?%)\]}]/.test(rawText);
+                    currentLine.text += `${needsSpace ? " " : ""}${rawText}`;
+                    currentLine.x = Math.min(currentLine.x, x);
+                    currentLine.right = Math.max(currentLine.right, x + itemWidth);
+                    currentLine.fontSize = Math.max(currentLine.fontSize, fontSize);
+                }
+
+                if (item.hasEOL) flushLine();
+            });
+            flushLine();
+            return lines;
+        };
+
+        const joinPdfLines = (lines) => cleanPdfText(lines.reduce((text, line) => {
+            if (!text) return line.text;
+            if (/[A-Za-z]-$/.test(text) && /^[a-z]/.test(line.text)) {
+                return `${text.slice(0, -1)}${line.text}`;
+            }
+            return `${text} ${line.text}`;
+        }, ""));
+
+        const pdfLinesToParagraphs = (lines, pageWidth) => {
+            if (lines.length === 0) return [];
+            const bodyLines = lines.filter(line => line.text.split(/\s+/).length >= 5);
+            const typicalFont = median((bodyLines.length ? bodyLines : lines).map(line => line.fontSize)) || 10;
+            const typicalWidth = median((bodyLines.length ? bodyLines : lines).map(line => line.width)) || pageWidth * 0.28;
+            const paragraphs = [];
+            let current = [];
+
+            const flushParagraph = () => {
+                const paragraph = joinPdfLines(current);
+                if (paragraph) paragraphs.push(paragraph);
+                current = [];
+            };
+
+            lines.forEach((line, index) => {
+                const previous = lines[index - 1];
+                const next = lines[index + 1];
+                const wordCount = line.text.split(/\s+/).filter(Boolean).length;
+                const isHeading = line.fontSize > typicalFont * 1.18 ||
+                    (wordCount <= 12 && line.fontSize > typicalFont * 1.08 && line.width < typicalWidth * 0.82 && !/[.!?;:]\s*[”"')\]]?$/.test(line.text));
+                const previousIsHeading = previous && (previous.fontSize > typicalFont * 1.2);
+                const columnReset = previous && line.y > previous.y + typicalFont * 1.35;
+                const sideBySideColumn = previous && Math.abs(line.y - previous.y) < typicalFont * 0.8 && Math.abs(line.x - previous.x) > pageWidth * 0.16;
+                const verticalGap = previous && previous.y > line.y && previous.y - line.y > typicalFont * 1.65;
+                const startsIndented = next && line.y > next.y && Math.abs(line.x - next.x) < pageWidth * 0.08 && line.x - next.x > typicalFont * 1.2;
+                const previousEndsParagraph = previous && previous.width < typicalWidth * 0.76 && /[.!?][”"')\]]?$/.test(previous.text);
+                const startsListItem = /^(?:[•▪●]|\d{1,2}[.)]|[A-Z][.)])\s+/.test(line.text);
+                const startsNewParagraph = current.length > 0 && (
+                    isHeading || previousIsHeading || columnReset || sideBySideColumn || verticalGap || startsIndented || previousEndsParagraph || startsListItem
+                );
+
+                if (startsNewParagraph) flushParagraph();
+                current.push(line);
+                if (isHeading) flushParagraph();
+            });
+            flushParagraph();
+            return paragraphs;
+        };
+
+        const getModelSafeText = (text, maxChars, actionLabel) => {
+            const normalized = text.trim();
+            if (normalized.length <= maxChars) return normalized;
+            const candidates = [
+                normalized.lastIndexOf(". ", maxChars),
+                normalized.lastIndexOf("? ", maxChars),
+                normalized.lastIndexOf("! ", maxChars)
+            ];
+            const sentenceCut = Math.max(...candidates);
+            const cutAt = sentenceCut > maxChars * 0.6 ? sentenceCut + 1 : normalized.lastIndexOf(" ", maxChars);
+            window.showToast(`${actionLabel}仅使用当前段落前 ${Math.round(maxChars / 1000)}k 字符，避免请求过长`, "warning");
+            return normalized.slice(0, Math.max(1, cutAt)).trim();
         };
 
         const App = () => {
@@ -1244,9 +1418,11 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 lineHeight: savedTypographyConfig.lineHeight === 2.4 ? DEFAULT_TYPOGRAPHY_CONFIG.lineHeight : (savedTypographyConfig.lineHeight ?? DEFAULT_TYPOGRAPHY_CONFIG.lineHeight)
             };
 
-            const [apiConfig, setApiConfig] = useState({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}) });
+            const initialApiConfig = normalizeApiConfig({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}) });
+            const [apiConfig, setApiConfig] = useState(initialApiConfig);
             const [isApiModalOpen, setIsApiModalOpen] = useState(false);
-            const [tempApiConfig, setTempApiConfig] = useState({ ...DEFAULT_API_CONFIG, ...(localState.apiConfig || {}) });
+            const [tempApiConfig, setTempApiConfig] = useState(initialApiConfig);
+            const [isTestingApi, setIsTestingApi] = useState(false);
 
             const [typographyConfig, setTypographyConfig] = useState(initialTypographyConfig);
             const [isTypographyModalOpen, setIsTypographyModalOpen] = useState(false);
@@ -1372,7 +1548,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 const unsubApi = onSnapshot(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'apiConfig'), 
                     (docSnap) => {
                         if (docSnap.exists()) {
-                            const data = { ...DEFAULT_API_CONFIG, ...docSnap.data() };
+                            const data = normalizeApiConfig({ ...DEFAULT_API_CONFIG, ...docSnap.data() });
                             setApiConfig(data);
                             setTempApiConfig(data);
                             persistLocalState({ apiConfig: data });
@@ -1411,18 +1587,38 @@ ${JSON.stringify(miniCorpus, null, 2)}
             };
 
             const handleSaveApiConfig = async () => {
-                setApiConfig(tempApiConfig);
-                persistLocalState({ apiConfig: tempApiConfig });
+                const normalizedConfig = normalizeApiConfig(tempApiConfig);
+                setApiConfig(normalizedConfig);
+                setTempApiConfig(normalizedConfig);
+                persistLocalState({ apiConfig: normalizedConfig });
                 setIsApiModalOpen(false);
                 if (user && dbInstance && window.firebaseImports) {
                     const { doc, setDoc } = window.firebaseImports;
                     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
                     try {
-                        await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'apiConfig'), tempApiConfig, { merge: true });
+                        await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'settings', 'apiConfig'), normalizedConfig, { merge: true });
                         window.showToast("API 配置已更新并同步至云端", "success");
                     } catch(e) { window.showToast("同步配置失败", "error"); }
                 } else {
                     window.showToast("API 配置已保存到本地", "success");
+                }
+            };
+
+            const handleTestApiConfig = async () => {
+                const normalizedConfig = normalizeApiConfig(tempApiConfig);
+                if (!(normalizedConfig.key || window.apiKey)) {
+                    window.showToast("请先填写 API Key", "warning");
+                    return;
+                }
+                setIsTestingApi(true);
+                try {
+                    await callLLM("Reply with exactly: OK", normalizedConfig, false);
+                    setTempApiConfig(normalizedConfig);
+                    window.showToast(`连接成功：${normalizedConfig.model}`, "success");
+                } catch (error) {
+                    window.showToast(`连接测试失败：${error.message}`, "error");
+                } finally {
+                    setIsTestingApi(false);
                 }
             };
 
@@ -1477,6 +1673,10 @@ ${JSON.stringify(miniCorpus, null, 2)}
             };
 
             const fetchFullTranslation = async (text, recordId) => {
+                if (text.length > 40000) {
+                    window.showToast("整本文本过长，已跳过一次性全文翻译；可按段展开精翻", "warning");
+                    return;
+                }
                 setIsFullTransLoading(true);
                 try {
                     const res = await callGeminiFullTranslation(text, apiConfig);
@@ -1582,44 +1782,21 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     pdfDocument = await loadingTask.promise;
                     setPdfExtractionProgress({ current: 0, total: pdfDocument.numPages });
 
-                    const extractedPages = [];
+                    const extractedParagraphs = [];
                     for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
                         const page = await pdfDocument.getPage(pageNumber);
+                        const viewport = page.getViewport({ scale: 1 });
                         const textContent = await page.getTextContent();
-                        const lines = [];
-                        let currentLine = "";
-
-                        const flushLine = () => {
-                            const normalized = currentLine.replace(/\s+/g, " ").trim();
-                            if (normalized) lines.push(normalized);
-                            currentLine = "";
-                        };
-
-                        textContent.items.forEach(item => {
-                            if (typeof item.str !== "string") return;
-                            const text = item.str.trim();
-                            if (text) {
-                                const needsSpace = currentLine &&
-                                    !/[\s-]$/.test(currentLine) &&
-                                    !/^[,.;:!?%)\]}]/.test(text);
-                                currentLine += `${needsSpace ? " " : ""}${text}`;
-                            }
-                            if (item.hasEOL) flushLine();
-                        });
-                        flushLine();
-
-                        const pageText = lines.join(" ")
-                            .replace(/(\p{L})-\s+(?=\p{Ll})/gu, "$1")
-                            .replace(/\s+/g, " ")
-                            .trim();
-                        if (pageText) extractedPages.push(pageText);
+                        const lines = pdfItemsToLines(textContent.items, viewport.width);
+                        const pageParagraphs = pdfLinesToParagraphs(lines, viewport.width);
+                        extractedParagraphs.push(...pageParagraphs);
                         page.cleanup();
 
                         setPdfExtractionProgress({ current: pageNumber, total: pdfDocument.numPages });
                         if (pageNumber % 3 === 0) await new Promise(resolve => setTimeout(resolve, 0));
                     }
 
-                    const extractedText = extractedPages.join("\n\n").trim();
+                    const extractedText = extractedParagraphs.join("\n\n").trim();
                     if (extractedText.length < 80) {
                         throw new Error("这份 PDF 可能是扫描版，未检测到可提取文字。请使用原样阅读。");
                     }
@@ -1629,7 +1806,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     setIsPdfChoiceOpen(false);
                     setIsPdfMode(false);
                     setPdfFile(null);
-                    window.showToast(`已在本地提取 ${pdfDocument.numPages} 页文字，文件未上传`, "success");
+                    window.showToast(`已在本地重建 ${pdfDocument.numPages} 页、${extractedParagraphs.length} 个段落，文件未上传`, "success");
                     window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
                 } catch (error) {
                     window.showToast(`PDF 本地提取失败：${error.message}`, "error");
@@ -1735,7 +1912,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const handleGenerateSummary = async () => {
                 setIsAnalyzingMap(true);
                 try {
-                    const data = await callGeminiSummary(inputText || defaultText, apiConfig);
+                    const sourceText = getModelSafeText(inputText || defaultText, 30000, "全文思维导图");
+                    const data = await callGeminiSummary(sourceText, apiConfig);
                     setFullMapData(data);
                     setCollapsedMapNodes(new Set());
                     if (currentHistoryId) {
@@ -1765,7 +1943,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 }
                 setIsGlobalLogicLoading(true);
                 try {
-                    const data = await callGeminiReadingAnalysis(inputText || defaultText, apiConfig);
+                    const sourceText = getModelSafeText(inputText || defaultText, 30000, "全文逻辑分析");
+                    const data = await callGeminiReadingAnalysis(sourceText, apiConfig);
                     setGlobalLogicData(data);
                     setShowGlobalLogic(true);
                     setTimeout(() => { document.getElementById('global-logic-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
@@ -1925,7 +2104,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 ⚡ 一键填入阿里云(Qwen)配置
                                             </button>
                                             <button 
-                                                onClick={() => setTempApiConfig({ apiType: 'gemini', key: '', model: 'gemini-2.0-flash', baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta' })}
+                                                onClick={() => setTempApiConfig({ apiType: 'gemini', key: '', model: CURRENT_GEMINI_TEXT_MODEL, baseUrl: 'https://generativelanguage.googleapis.com', apiVersion: 'v1beta' })}
                                                 className="px-3 py-1.5 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors shadow-sm"
                                             >
                                                 🇬 一键填入 Google Gemini 配置
@@ -1978,7 +2157,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 <input 
                                                     type="text" 
                                                     className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-[13px] outline-none focus:border-purple-400 text-gray-800 dark:text-gray-200"
-                                                    placeholder={tempApiConfig.apiType === 'openai' ? "如: qwen-plus" : "如: gemini-2.0-flash"}
+                                                    placeholder={tempApiConfig.apiType === 'openai' ? "如: qwen-plus" : `如: ${CURRENT_GEMINI_TEXT_MODEL}`}
                                                     value={tempApiConfig.model}
                                                     onChange={e => setTempApiConfig({...tempApiConfig, model: e.target.value})}
                                                 />
@@ -1996,9 +2175,12 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                             />
                                         </div>
                                     </div>
-                                    <div className="flex justify-end mt-6">
-                                        <button onClick={handleSaveApiConfig} className="px-5 py-2 bg-purple-600 text-white rounded-lg text-[13px] font-medium hover:bg-purple-700 active:scale-95 transition-transform shadow-sm">
-                                            保存并连接
+                                    <div className="flex justify-end gap-2 mt-6">
+                                        <button onClick={handleTestApiConfig} disabled={isTestingApi} className="px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-md text-[13px] font-medium hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-wait">
+                                            {isTestingApi ? "测试中..." : "测试连接"}
+                                        </button>
+                                        <button onClick={handleSaveApiConfig} className="px-5 py-2 bg-purple-600 text-white rounded-md text-[13px] font-medium hover:bg-purple-700 active:scale-95 transition-transform shadow-sm">
+                                            保存配置
                                         </button>
                                     </div>
                                 </div>
