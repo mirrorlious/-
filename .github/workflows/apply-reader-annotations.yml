@@ -1,0 +1,49 @@
+name: Apply reader annotations patch
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+    paths:
+      - scripts/apply_reader_annotations.py
+      - .github/workflows/apply-reader-annotations.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-reader:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out annotation branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+
+      - name: Apply annotation patch
+        run: python scripts/apply_reader_annotations.py
+
+      - name: Validate generated source
+        shell: bash
+        run: |
+          git diff --check
+          grep -q 'reader-annotation-mark' index.html
+          grep -q '批注仅保存在当前设备' index.html
+          grep -q 'Ctrl/⌘ + Alt + M' index.html
+          grep -q '全文笔记' index.html
+
+      - name: Commit patched reader and remove temporary automation
+        shell: bash
+        run: |
+          rm -f scripts/apply_reader_annotations.py
+          rm -f .github/workflows/apply-reader-annotations.yml
+          rmdir scripts 2>/dev/null || true
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add anchored reader annotations and notes'
+          git push origin HEAD:feat/reader-annotations-v2
