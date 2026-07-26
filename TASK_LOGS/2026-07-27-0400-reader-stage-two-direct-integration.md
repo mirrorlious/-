@@ -2,7 +2,7 @@
 
 - 时间：2026-07-27
 - 执行者：ChatGPT
-- 状态：开发中
+- 状态：部分完成
 - 本地路径：`D:\01_project\杨的阅读器`
 - GitHub 上传：是，用户已明确要求直接在当前功能分支开始实施
 - 工作分支：`feat/reader-annotations-v2`
@@ -22,7 +22,7 @@
 - 整合文章切分、噪音过滤、识别结果预览与选择
 - 整合 `book-imports` / `book-articles` IndexedDB 本地持久化
 - 保留句子批注、批注颜色、Notes 与现有 BYOK 路由
-- 删除本次已确认失效的临时第二阶段工作流
+- 删除已确认失效的临时第二阶段工作流
 
 ## 4. 明确不做
 
@@ -35,59 +35,88 @@
 ## 5. 审计结果
 
 - 真实可维护入口为根目录 `index.html`，单文件 React/Babel 静态应用。
-- 当前分支 `feat/reader-annotations-v2` 已有批注、颜色选择、Notes、分栏和排版功能。
+- 当前分支原先已有批注、颜色选择、Notes、分栏和排版功能。
 - 先前失败发生在 GitHub Actions 的 `Execute embedded stage-two patch`，原因是补丁依赖旧源码的精确字符串锚点；用户上传、SSH、分支和写权限均正常。
-- 分支 `feat/reader-polish-book-import` 中已有完整、可审阅的第二阶段实现，且 `index.html` 同时保留批注功能；本次采用整文件候选验证后整合，而非再次执行脆弱锚点替换。
-- 长文档结果应存 IndexedDB，不写入 localStorage；现有候选实现使用 `book-imports`、`book-articles` 和 `pdf-tasks`。
-- 一次性整合工作流已登记；本提交用于在工作流存在后触发执行。
+- `feat/reader-polish-book-import` 中已有完整第二阶段实现，`index.html` 同时保留批注功能，且对应 Vercel 预览部署为 Ready。
+- 本次没有再次运行脆弱的字符串补丁，而是使用 Git tree/merge commit 将已审计候选 `index.html` 写入当前分支，同时保留当前分支的日志和其他文件。
+- 长文档结果写入 IndexedDB，不将整本正文写入 localStorage。
 
 ## 6. 涉及文件
 
-- `index.html`
-- `TASK_LOGS/2026-07-27-0400-reader-stage-two-direct-integration.md`
-- 临时工作流（成功后删除）
-- 删除已失效的 `.github/workflows/apply_reader_stage_two.yml`
-- 删除已失效的 `.github/workflows/apply_reader_stage_two_bridge.yml`
+- 修改：`index.html`
+- 新增并更新：`TASK_LOGS/2026-07-27-0400-reader-stage-two-direct-integration.md`
+- 删除：`.github/workflows/apply_reader_stage_two.yml`
+- 删除：`.github/workflows/apply_reader_stage_two_bridge.yml`
+- 删除：`.github/workflows/integrate_reader_stage_two_direct.yml`
 
 ## 7. 实施计划
 
-1. 从已审计候选分支读取完整 `index.html`，先验证批注和第二阶段关键标记。
-2. 复制候选到当前功能分支，并将 OCR 提示词调整为保留标题、段落边界和过滤前置噪音。
-3. 执行脚本标签、关键标记、敏感信息与 `git diff --check` 验证。
-4. 提交到 `feat/reader-annotations-v2`，不合并 `main`。
-5. 更新本日志，记录自动验证、手工验收项、风险和回滚方式。
+1. 审计候选实现中的批注、结构树编辑、文章切分和本地保存标记。
+2. 以当前分支为第一父提交、候选实现分支为第二父提交创建合并提交，只替换 `index.html`。
+3. 检查当前分支中的关键实现和 IndexedDB 存储。
+4. 删除失效和一次性工作流。
+5. 等待用户本地进行真实文件手工验收。
 
 ## 8. 实际修改
 
-开发中。
+- 当前分支已写入完整第二阶段 `index.html`。
+- 全屏全文结构树支持编辑中英文标题、添加子节点、删除节点和保存到当前文章。
+- 结构树展开/收起控制移动到右侧，并使用上/下箭头。
+- PDF 导入采用文本层优先；低文本页面才渲染后调用 OCR。
+- PDF 按页提取结果保存到 `pdf-tasks`，支持从已完成页继续处理。
+- 导入后过滤疑似目录、封面、页码和低信息页面，并按标题、页边界和篇幅切分文章。
+- 显示文章数量、标题、字数、页码范围和正文预览。
+- 支持勾选文章、单篇进入精读、批量保存到当前浏览器。
+- `book-imports` 保存整次识别会话；`book-articles` 保存用户选中的文章。
+- 保留句子批注、自定义批注颜色、Notes、分栏、排版和 BYOK 任务路由。
+- 已删除失败的第二阶段补丁工作流和一次性整合工作流。
 
 ## 9. 数据与配置迁移
 
-预计 IndexedDB 版本升级并新增 `book-imports`、`book-articles`；不得删除既有缓存和批注。
+- IndexedDB 版本为 2。
+- 新增 `book-imports` 与 `book-articles`。
+- 保留既有 `ai-cache`、`tts-cache`、`pdf-tasks` 和本地批注数据，不执行清空或破坏性迁移。
+- localStorage 仅保存轻量状态及最近识别会话 key，不保存整本正文。
 
 ## 10. 测试
 
 ### 自动测试
 
-待执行。
+- 当前分支 `index.html` blob 已核对为审计候选实现。
+- 关键代码检查：`segmentBookPages`、`prepareBookImport`、`bookImportSession`、`mapEditDraft`、`isMapEditing`、`book-imports`、`book-articles` 均存在。
+- 批注兼容检查：`reader-annotation-mark`、批注颜色状态和 Notes 仍存在。
+- 候选实现对应 Vercel 部署状态：Ready。
+- GitHub 合并提交以当前分支为第一父提交，没有覆盖当前分支的任务日志和其他文件。
 
 ### 手工验收
 
-待用户在浏览器验收。
+待用户在本地浏览器完成：
+
+- 全屏结构树编辑、保存、刷新后恢复
+- 文本型 PDF 多篇文章切分
+- 扫描型 PDF 低文本页 OCR
+- 多张图片导入后的文章预览和勾选
+- 目录、封面、页码过滤
+- 保存到阅读库后刷新与重新打开
+- 批注、颜色和长难句高亮兼容
 
 ## 11. 风险与已知问题
 
 - 自动文章切分属于启发式判断，复杂杂志版式仍可能需要用户修改标题或取消选择。
-- 浏览器可能按存储策略清理 IndexedDB，界面需明确“保存在当前浏览器”。
+- OCR 模型输出质量会影响标题和段落边界；本地切分规则会兜底，但无法保证所有出版物一次正确。
+- 浏览器可能按存储策略清理 IndexedDB，用户不应把它当作永久云端备份。
+- 本次尚未在用户真实文件与浏览器环境中完成手工验收。
 
 ## 12. 未完成项
 
-开发中。
+- 用户本地手工验收。
+- 根据真实整本书样本调整噪音过滤和文章边界阈值。
+- 验收通过前不合并到 `main`。
 
 ## 13. 回滚方式
 
-回退本次整合提交即可恢复当前 `feat/reader-annotations-v2` 的原始 `index.html`。
+回退合并提交 `8feb9a5d2a2c7e23b867efc89459772b51149e2c`，即可恢复整合前的 `feat/reader-annotations-v2` 代码；后续三个工作流删除提交可按需单独回退。
 
 ## 14. 最终结论
 
-当前状态：开发中。
+当前状态：部分完成。第二阶段代码已直接写入 `feat/reader-annotations-v2`，未合并 `main`；自动审计通过，等待用户本地真实文件验收。
