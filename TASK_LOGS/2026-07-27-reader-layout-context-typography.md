@@ -152,3 +152,8 @@ GitHub：未上传，等待用户本地验收。
 - Worktree is clean on local branch `feat/reader-layout-context-typography`.
 - Known manual checks: drag-select text and verify the floating toolbar positioning; test browser fullscreen permission behavior; verify typography on the target machines' installed fonts.
 - Next user action: perform the manual acceptance checklist. Do not push, merge, create a PR, or upload to GitHub.
+
+## 18. Final acceptance correction
+
+- 修正：段落分析结果现在会自动切换到 split 模式并打开 analysis 面板，避免标准/专注模式下结果不可见。
+- 回归：重新加载本地页面、加载示例并进入精读成功；布局控件和右侧面板均存在。
