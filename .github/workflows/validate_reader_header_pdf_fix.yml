@@ -1,0 +1,61 @@
+name: Validate reader header and PDF repair
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+
+      - name: Check repair markers
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              "layoutMode === 'split' ? 'max-w-[1480px]'",
+              'const deleteReaderStore = async',
+              "extractionMethod = 'text-raw'",
+              "await deleteReaderStore('pdf-tasks', taskKey)",
+              '可读页 ${readablePages.length}'
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit(f'Missing markers: {missing}')
+          if text.count('<script') != text.count('</script>'):
+              raise SystemExit('Script tag count mismatch')
+          print('Static markers passed')
+          PY
+
+      - name: Parse JSX
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          marker = '<script type="text/babel" data-type="module">'
+          start = text.index(marker) + len(marker)
+          end = text.index('</script>', start)
+          Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
+          PY
+          npx --yes --package=@babel/core --package=@babel/preset-react node - <<'NODE'
+          const fs = require('fs');
+          const babel = require('@babel/core');
+          const source = fs.readFileSync('/tmp/reader.jsx', 'utf8');
+          babel.transformSync(source, {
+            filename: 'index.jsx',
+            sourceType: 'module',
+            presets: [['@babel/preset-react', { runtime: 'classic' }]]
+          });
+          console.log('Babel JSX parse passed');
+          NODE
