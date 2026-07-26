@@ -1,0 +1,83 @@
+name: Apply full-width icon reader layout
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+
+      - name: Apply scoped layout patch
+        shell: bash
+        run: python scripts/one_shot_fullwidth_icon_layout.py
+
+      - name: Validate source
+        shell: bash
+        run: |
+          git diff --check
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              'const [articleColumnMode, setArticleColumnMode]',
+              'readerToolbarIconClass',
+              'reader-article-columns',
+              'aria-label="标准布局"',
+              'aria-label="正文与侧栏分栏"',
+              'aria-label="专注布局"',
+              'reader-side-shell',
+              'reader-side-scroll custom-scrollbar',
+              "articleColumnMode === 'double' ? 'reader-article-body-wide reader-article-columns'",
+              "isReadingMode || isPdfMode ? 'w-full max-w-none"
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit(f'Missing markers: {missing}')
+          if text.count('<script') != text.count('</script>'):
+              raise SystemExit('Script tag count mismatch')
+          if 'max-w-[1480px] sm:my-8' in text:
+              raise SystemExit('Old constrained split main width still present')
+          print('Static layout markers passed')
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          marker = '<script type="text/babel" data-type="module">'
+          start = text.index(marker) + len(marker)
+          end = text.index('</script>', start)
+          Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
+          PY
+          npm init -y >/dev/null 2>&1
+          npm install --no-save @babel/core @babel/preset-react >/dev/null 2>&1
+          node - <<'NODE'
+          const fs = require('fs');
+          const babel = require('@babel/core');
+          const source = fs.readFileSync('/tmp/reader.jsx', 'utf8');
+          babel.transformSync(source, {
+            filename: 'index.jsx',
+            sourceType: 'module',
+            presets: [['@babel/preset-react', { runtime: 'classic' }]]
+          });
+          console.log('Babel JSX parse passed');
+          NODE
+
+      - name: Commit feature
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: use full-width icon reader layout"
+          git push origin HEAD:feat/reader-annotations-v2
