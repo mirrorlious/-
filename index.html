@@ -1245,6 +1245,59 @@ ${JSON.stringify(miniCorpus, null, 2)}
             );
         };
 
+        const SingleQuizPractice = ({ quizData }) => {
+            const [selectedAnswer, setSelectedAnswer] = useState('');
+            const [submitted, setSubmitted] = useState(false);
+            const quiz = quizData || {};
+            const options = Array.isArray(quiz.options) ? quiz.options : [];
+            const submit = () => {
+                if (!selectedAnswer) {
+                    window.showToast('请先选择一个答案', 'warning');
+                    return;
+                }
+                setSubmitted(true);
+            };
+            return (
+                <div className="space-y-4" data-reader-single-practice="true">
+                    <div>
+                        <p className="font-serif font-semibold leading-relaxed text-gray-900 dark:text-gray-100">{quiz.questionEn}</p>
+                        {submitted && quiz.questionZh && <p className="mt-1 text-[12px] text-gray-500 dark:text-gray-400">{quiz.questionZh}</p>}
+                    </div>
+                    <div className="space-y-2">
+                        {options.map(option => {
+                            const isSelected = selectedAnswer === option.id;
+                            const isCorrect = submitted && option.id === quiz.correctAnswerId;
+                            const isWrong = submitted && isSelected && option.id !== quiz.correctAnswerId;
+                            const className = isCorrect
+                                ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20'
+                                : isWrong
+                                    ? 'border-rose-300 bg-rose-50 dark:bg-rose-900/20'
+                                    : isSelected
+                                        ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/20'
+                                        : 'border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/30 hover:border-sky-300';
+                            return (
+                                <button key={option.id} type="button" disabled={submitted} onClick={() => setSelectedAnswer(option.id)} className={`w-full p-3 border rounded-sm text-left transition-colors ${className}`}>
+                                    <div className="font-medium">{option.id}. {option.textEn}</div>
+                                    {submitted && option.textZh && <div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">{option.textZh}</div>}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {!submitted ? (
+                        <button type="button" onClick={submit} className="min-h-[38px] px-4 rounded-sm bg-sky-700 text-white hover:bg-sky-800">提交答案</button>
+                    ) : (
+                        <div className="space-y-3">
+                            <div className={`font-semibold ${selectedAnswer === quiz.correctAnswerId ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {selectedAnswer === quiz.correctAnswerId ? '回答正确' : `回答错误，正确答案：${quiz.correctAnswerId || '-'}`}
+                            </div>
+                            {quiz.analysis && <div className="p-3 bg-violet-50 dark:bg-violet-900/15 border-l-2 border-violet-400 leading-relaxed"><span className="font-semibold">解析：</span>{quiz.analysis}</div>}
+                            <button type="button" onClick={() => { setSelectedAnswer(''); setSubmitted(false); }} className="min-h-[34px] px-3 border border-gray-200 dark:border-gray-700 rounded-sm hover:bg-gray-50 dark:hover:bg-gray-800">重新作答</button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         const QuizSetPractice = ({ quizData }) => {
             const questions = useMemo(() => normalizeQuizQuestions(quizData), [quizData]);
             const [answers, setAnswers] = useState({});
@@ -1705,7 +1758,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
             const handleRequestAnnotation = () => {
                 if (!selectionAnchor) {
-                    window.showToast("请先选择需要批注的文字", "warning");
+                    window.showToast("请先选择需要添加笔记的文字", "warning");
                     return;
                 }
                 setContextMenu(null);
@@ -1917,20 +1970,34 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         ))}
                     </div>
 
+                    {annotations.length > 0 && (
+                        <button
+                            type="button"
+                            data-reader-note-flag="true"
+                            onClick={(event) => { event.stopPropagation(); onFocusAnnotation?.(annotations[0].id); }}
+                            className="absolute right-0 md:-right-10 bottom-0 z-20 min-w-[30px] h-8 px-1.5 inline-flex items-center justify-center gap-1 rounded-sm border border-amber-200 dark:border-amber-800 bg-amber-50/95 dark:bg-amber-900/25 text-amber-700 dark:text-amber-300 shadow-sm hover:border-amber-400"
+                            title={`本段有 ${annotations.length} 条选区笔记`}
+                            aria-label={`打开第 ${paragraphIndex + 1} 段的 ${annotations.length} 条选区笔记`}
+                        >
+                            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3a1 1 0 011-1h9.5a1 1 0 01.8 1.6L15 7l2.3 3.4a1 1 0 01-.8 1.6H8v9a1 1 0 11-2 0V3z"/></svg>
+                            <span className="text-[10px] font-semibold">{annotations.length}</span>
+                        </button>
+                    )}
+
                     {selectedText && (
                         <div role="toolbar" aria-label="文字选区操作" onMouseDown={(event) => event.preventDefault()} className="absolute left-0 right-0 top-full z-30 mt-2 flex flex-wrap items-center gap-1.5 p-2 bg-sky-700 text-white rounded-sm shadow-lg animate-fade-in">
                             <span className="px-2 text-[11px] text-gray-300 truncate max-w-[180px]" title={selectedText}>{selectedText}</span>
                             <button onClick={() => navigator.clipboard?.writeText(selectedText)} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20">复制</button>
                             <button onClick={handleSelectionTranslation} disabled={isSelectionTranslating} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20 disabled:opacity-50">{isSelectionTranslating ? '翻译中…' : '翻译'}</button>
                             <button onClick={handleSelectionSpeech} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20">朗读</button>
-                            <button onClick={handleRequestAnnotation} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-amber-500/90 hover:bg-amber-500 text-gray-950 font-medium">批注</button>
+                            <button onClick={handleRequestAnnotation} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-amber-500/90 hover:bg-amber-500 text-gray-950 font-medium">添加笔记</button>
                             <button onClick={() => setIsInteracting(true)} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20">更多</button>
                         </div>
                     )}
 
                     {contextMenu && (
                         <div data-reader-context-menu="true" role="menu" aria-label="选区快捷操作" className="reader-context-menu rounded-sm text-[12px] text-gray-700 dark:text-gray-200" style={{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }} onMouseDown={(event) => event.preventDefault()}>
-                            <button role="menuitem" onClick={handleRequestAnnotation} className="w-full min-h-[36px] px-3 text-left rounded-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-800 dark:text-amber-300 font-medium">添加批注</button>
+                            <button role="menuitem" onClick={handleRequestAnnotation} className="w-full min-h-[36px] px-3 text-left rounded-sm hover:bg-amber-50 dark:hover:bg-amber-900/20 text-amber-800 dark:text-amber-300 font-medium">添加选区笔记</button>
                             <button role="menuitem" onClick={() => { setContextMenu(null); handleSelectionTranslation(); }} className="w-full min-h-[36px] px-3 text-left rounded-sm hover:bg-gray-100 dark:hover:bg-gray-800">翻译选中内容</button>
                             <button role="menuitem" onClick={() => { setContextMenu(null); handleSelectionSpeech(); }} className="w-full min-h-[36px] px-3 text-left rounded-sm hover:bg-gray-100 dark:hover:bg-gray-800">朗读选中内容</button>
                             <button role="menuitem" onClick={() => { navigator.clipboard?.writeText(selectedText); setContextMenu(null); }} className="w-full min-h-[36px] px-3 text-left rounded-sm hover:bg-gray-100 dark:hover:bg-gray-800">复制</button>
@@ -2802,10 +2869,14 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [layoutMode, setLayoutMode] = useState(['standard', 'split', 'focus'].includes(savedLayoutState.layoutMode) ? savedLayoutState.layoutMode : defaultLayoutMode);
             const defaultArticleColumnMode = typeof window !== 'undefined' && window.innerWidth >= 1440 ? 'double' : 'single';
             const [articleColumnMode, setArticleColumnMode] = useState(['single', 'double'].includes(savedLayoutState.articleColumnMode) ? savedLayoutState.articleColumnMode : defaultArticleColumnMode);
-            const [rightPanelTab, setRightPanelTab] = useState(['outline', 'mindmap', 'analysis', 'notes'].includes(savedLayoutState.rightPanelTab) ? savedLayoutState.rightPanelTab : 'outline');
+            const migratedRightPanelTab = savedLayoutState.rightPanelTab === 'mindmap' ? 'outline' : savedLayoutState.rightPanelTab;
+            const [rightPanelTab, setRightPanelTab] = useState(['outline', 'quiz', 'analysis', 'notes'].includes(migratedRightPanelTab) ? migratedRightPanelTab : 'outline');
+            const [structureViewMode, setStructureViewMode] = useState(savedLayoutState.structureViewMode === 'mindmap' ? 'mindmap' : 'tree');
             const [rightPanelOpen, setRightPanelOpen] = useState(savedLayoutState.rightPanelOpen !== false);
             const [splitRatio, setSplitRatio] = useState(Number.isFinite(savedLayoutState.splitRatio) ? Math.min(70, Math.max(52, savedLayoutState.splitRatio)) : 58);
             const [rightPanelAnalysis, setRightPanelAnalysis] = useState(null);
+            const [rightPanelTranslationStack, setRightPanelTranslationStack] = useState([]);
+            const [practicePanelResult, setPracticePanelResult] = useState(null);
             const [isFullTextMenuOpen, setIsFullTextMenuOpen] = useState(false);
             const fullTextMenuRef = useRef(null);
             const restoredReadingNotes = localState.readingNotes && typeof localState.readingNotes === 'object'
@@ -2829,8 +2900,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
 
             useEffect(() => {
-                persistLocalState({ layoutState: { layoutMode, articleColumnMode, rightPanelTab, rightPanelOpen, splitRatio } });
-            }, [layoutMode, articleColumnMode, rightPanelTab, rightPanelOpen, splitRatio]);
+                persistLocalState({ layoutState: { layoutMode, articleColumnMode, rightPanelTab, rightPanelOpen, splitRatio, structureViewMode } });
+            }, [layoutMode, articleColumnMode, rightPanelTab, rightPanelOpen, splitRatio, structureViewMode]);
 
             useEffect(() => {
                 if (!isFullTextMenuOpen) return undefined;
@@ -2932,6 +3003,10 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [history, setHistory] = useState(localState.history || []);
             const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
             const [currentHistoryId, setCurrentHistoryId] = useState(null);
+            useEffect(() => {
+                setRightPanelTranslationStack([]);
+                setPracticePanelResult(null);
+            }, [currentHistoryId]);
             const [paragraphResults, setParagraphResults] = useState({});
             const [fullQuizData, setFullQuizData] = useState(null);
             const [isFullQuizLoading, setIsFullQuizLoading] = useState(false);
@@ -4358,20 +4433,21 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
             const handleFullQuizTool = async () => {
                 setIsFullTextMenuOpen(false);
-                openRightPanelTab('analysis');
+                openRightPanelTab('quiz');
                 if (normalizeQuizQuestions(fullQuizData).length >= 3) {
-                    setRightPanelAnalysis({ kind: 'document-quiz', title: '全文练习', data: fullQuizData, createdAt: Date.now() });
+                    const result = { kind: 'document-quiz', title: '全文模拟习题', data: fullQuizData, createdAt: Date.now() };
+                    setPracticePanelResult(result);
                     return fullQuizData;
                 }
                 setIsFullQuizLoading(true);
-                setRightPanelAnalysis({ kind: 'loading', title: '全文练习', message: '正在生成全文练习…' });
+                setPracticePanelResult({ kind: 'loading', title: '全文模拟习题', message: '正在生成三道全文练习…' });
                 try {
                     const data = await callGeminiFullQuiz(getModelSafeText(inputText || defaultText, 18000, '全文练习'), apiConfig);
                     setFullQuizData(data);
-                    setRightPanelAnalysis({ kind: 'document-quiz', title: '全文练习', data, createdAt: Date.now() });
+                    setPracticePanelResult({ kind: 'document-quiz', title: '全文模拟习题', data, createdAt: Date.now() });
                     return data;
                 } catch (error) {
-                    setRightPanelAnalysis({ kind: 'error', title: '全文练习', message: error.message });
+                    setPracticePanelResult({ kind: 'error', title: '全文模拟习题', message: error.message });
                     window.showToast(`全文练习生成失败：${error.message}`, 'error');
                     return null;
                 } finally {
@@ -4385,12 +4461,72 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 openRightPanelTab('notes');
             };
 
+            const renderPracticePanel = () => {
+                const result = practicePanelResult;
+                if (result?.kind === 'loading' || (isFullQuizLoading && !result)) {
+                    return <div className="py-10 text-center"><div className="mx-auto w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-3 text-gray-500">{result?.message || '正在生成模拟习题…'}</p></div>;
+                }
+                if (result?.kind === 'error') {
+                    return <div className="p-3 border border-red-200 dark:border-red-900 bg-red-50/60 dark:bg-red-900/15 rounded-sm text-red-700 dark:text-red-300"><h3 className="font-semibold">{result.title || '生成失败'}</h3><p className="mt-2 leading-relaxed">{result.message}</p></div>;
+                }
+                if (result?.kind === 'paragraph-quiz') {
+                    return (
+                        <div className="space-y-4" data-reader-practice-panel="paragraph">
+                            <div className="pb-3 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div><h3 className="font-semibold text-gray-900 dark:text-gray-100">{result.title || '段落模拟习题'}</h3><p className="mt-1 text-[11px] text-gray-400">第 {result.paragraphIndex + 1} 段</p></div>
+                                    <button onClick={() => setPracticePanelResult(null)} className="w-7 h-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" aria-label="关闭当前段落练习">×</button>
+                                </div>
+                                {result.sourceText && <blockquote className="mt-3 pl-3 border-l-2 border-violet-300 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400 line-clamp-4">“{result.sourceText}”</blockquote>}
+                            </div>
+                            <SingleQuizPractice quizData={result.data} />
+                            {normalizeQuizQuestions(fullQuizData).length >= 3 && <button type="button" onClick={() => setPracticePanelResult({ kind: 'document-quiz', title: '全文模拟习题', data: fullQuizData, createdAt: Date.now() })} className="min-h-[34px] px-3 border border-gray-200 dark:border-gray-700 rounded-sm hover:bg-gray-50 dark:hover:bg-gray-800">查看全文三题</button>}
+                        </div>
+                    );
+                }
+                const quizData = result?.kind === 'document-quiz' ? result.data : fullQuizData;
+                if (normalizeQuizQuestions(quizData).length) {
+                    return (
+                        <div className="space-y-4" data-reader-practice-panel="document">
+                            <div className="pb-3 border-b border-gray-200 dark:border-gray-700"><h3 className="font-semibold text-gray-900 dark:text-gray-100">全文模拟习题</h3><p className="mt-1 text-[11px] text-gray-400">完成三题后提交，随后显示答案与解析。</p></div>
+                            <QuizSetPractice quizData={quizData} />
+                        </div>
+                    );
+                }
+                return (
+                    <div className="py-8 text-center" data-reader-practice-empty="true">
+                        <p className="text-[13px] text-gray-400 dark:text-gray-500">尚未生成模拟习题。</p>
+                        <button onClick={handleFullQuizTool} className="mt-4 min-h-[38px] px-4 rounded-sm border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800">生成全文三题</button>
+                    </div>
+                );
+            };
+
             const renderRightPanelAnalysis = () => {
                 const result = rightPanelAnalysis;
-                if (!result) {
+                const translations = rightPanelTranslationStack;
+                const translationCards = translations.length ? (
+                    <section className="space-y-3" data-reader-translation-stack="true">
+                        <div className="flex items-center justify-between gap-3">
+                            <div><h3 className="font-semibold text-gray-900 dark:text-gray-100">段落翻译</h3><p className="mt-1 text-[11px] text-gray-400">已保留 {translations.length} 个段落结果</p></div>
+                            <button type="button" onClick={() => setRightPanelTranslationStack([])} className="min-h-[30px] px-2 text-[11px] border border-gray-200 dark:border-gray-700 rounded-sm hover:bg-white dark:hover:bg-gray-800">全部清空</button>
+                        </div>
+                        {translations.map(item => (
+                            <article key={`translation-${item.paragraphIndex}`} className="p-3 border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/30 rounded-sm">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="text-[11px] font-medium text-sky-700 dark:text-sky-300">第 {item.paragraphIndex + 1} 段</div>
+                                    <button type="button" onClick={() => setRightPanelTranslationStack(previous => previous.filter(entry => entry.paragraphIndex !== item.paragraphIndex))} className="w-6 h-6 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" aria-label={`移除第 ${item.paragraphIndex + 1} 段翻译`}>×</button>
+                                </div>
+                                {item.sourceText && <blockquote className="mt-2 pl-3 border-l-2 border-sky-200 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400 line-clamp-3">“{item.sourceText}”</blockquote>}
+                                <div className="mt-3 whitespace-pre-wrap leading-[1.8] text-[14px]">{item.data?.translation || '暂无翻译结果'}</div>
+                            </article>
+                        ))}
+                    </section>
+                ) : null;
+
+                if (!result && !translations.length) {
                     return (
                         <div className="py-8 text-center">
-                            <p className="text-[13px] text-gray-400 dark:text-gray-500">段落翻译、长难句、练习和全文分析会集中显示在这里。</p>
+                            <p className="text-[13px] text-gray-400 dark:text-gray-500">段落翻译、长难句和全文分析会集中显示在这里。</p>
                             <div className="mt-4 grid grid-cols-2 gap-2">
                                 <button onClick={handleFullTranslationTool} className="min-h-[38px] rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] hover:bg-white dark:hover:bg-gray-800">全文翻译</button>
                                 <button onClick={handleFullLogicTool} className="min-h-[38px] rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] hover:bg-white dark:hover:bg-gray-800">全文逻辑</button>
@@ -4399,55 +4535,43 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     );
                 }
 
-                if (result.kind === 'loading') {
-                    return <div className="py-10 text-center"><div className="mx-auto w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-3 text-gray-500">{result.message || '正在处理…'}</p></div>;
-                }
-                if (result.kind === 'error') {
-                    return <div className="p-3 border border-red-200 dark:border-red-900 bg-red-50/60 dark:bg-red-900/15 rounded-sm text-red-700 dark:text-red-300"><h3 className="font-semibold">{result.title || '处理失败'}</h3><p className="mt-2 leading-relaxed">{result.message}</p></div>;
-                }
-
-                let content = null;
-                if (result.kind === 'paragraph-translation') {
-                    content = <div className="whitespace-pre-wrap leading-[1.8] text-[14px]">{result.data?.translation || '暂无翻译结果'}</div>;
-                } else if (result.kind === 'paragraph-analysis') {
-                    content = result.data?.complexSentences?.length ? <SyntaxBreakdowns data={result.data} /> : <p className="text-gray-400">当前段落未识别到复杂句。</p>;
-                } else if (result.kind === 'paragraph-quiz') {
-                    const quiz = result.data || {};
-                    content = (
-                        <div className="space-y-3">
-                            <div><p className="font-serif font-semibold leading-relaxed text-gray-900 dark:text-gray-100">{quiz.questionEn}</p><p className="mt-1 text-gray-500 dark:text-gray-400">{quiz.questionZh}</p></div>
-                            <div className="space-y-2">{(quiz.options || []).map(option => <div key={option.id} className={`p-2.5 border rounded-sm ${option.id === quiz.correctAnswerId ? 'border-emerald-300 bg-emerald-50/60 dark:bg-emerald-900/15' : 'border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-gray-900/30'}`}><span className="font-medium">{option.id}. {option.textEn}</span>{option.textZh && <div className="mt-1 text-[11px] text-gray-500">{option.textZh}</div>}</div>)}</div>
-                            {quiz.analysis && <div className="p-3 bg-violet-50 dark:bg-violet-900/15 border-l-2 border-violet-400 leading-relaxed"><span className="font-semibold">解析：</span>{quiz.analysis}</div>}
-                        </div>
-                    );
-                } else if (result.kind === 'document-translation') {
-                    content = <div className="space-y-3">{(result.data?.translations || []).map((paragraph, index) => <p key={index} className="leading-[1.8] text-[14px]">{paragraph}</p>)}</div>;
-                } else if (result.kind === 'document-logic') {
-                    const logic = result.data || {};
-                    content = (
-                        <div className="space-y-4">
-                            {logic.coreMeaning && <div className="p-3 bg-teal-50 dark:bg-teal-900/15 border-l-2 border-teal-500"><div className="text-[11px] font-medium text-teal-700 dark:text-teal-300">核心主旨</div><p className="mt-1 leading-relaxed font-medium">{logic.coreMeaning}</p></div>}
-                            {logic.logicalStructure && <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">逻辑结构</h4><p className="mt-2 leading-relaxed text-gray-600 dark:text-gray-300">{logic.logicalStructure}</p></div>}
-                            {logic.referenceAnalysis?.length > 0 && <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">指代与连贯</h4><ul className="mt-2 space-y-1.5 list-disc pl-5">{logic.referenceAnalysis.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
-                            {logic.trapIdentification && logic.trapIdentification !== '无' && <div className="p-3 bg-red-50 dark:bg-red-900/15 border-l-2 border-red-400"><div className="font-semibold text-red-700 dark:text-red-300">命题陷阱</div><p className="mt-1 leading-relaxed">{logic.trapIdentification}</p></div>}
-                        </div>
-                    );
-                } else if (result.kind === 'document-quiz') {
-                    content = <QuizSetPractice quizData={result.data} />;
-                }
-
-                return (
-                    <div className="space-y-4">
-                        <div className="pb-3 border-b border-gray-200 dark:border-gray-700">
-                            <div className="flex items-start justify-between gap-3">
-                                <div><h3 className="font-semibold text-gray-900 dark:text-gray-100">{result.title || '精读结果'}</h3><p className="mt-1 text-[11px] text-gray-400">{Number.isFinite(result.paragraphIndex) ? `第 ${result.paragraphIndex + 1} 段` : '全文'} · 当前结果</p></div>
-                                <button onClick={() => setRightPanelAnalysis(null)} className="w-7 h-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" aria-label="清空当前精读结果">×</button>
+                let currentBlock = null;
+                if (result?.kind === 'loading') {
+                    currentBlock = <div className="py-10 text-center"><div className="mx-auto w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-3 text-gray-500">{result.message || '正在处理…'}</p></div>;
+                } else if (result?.kind === 'error') {
+                    currentBlock = <div className="p-3 border border-red-200 dark:border-red-900 bg-red-50/60 dark:bg-red-900/15 rounded-sm text-red-700 dark:text-red-300"><h3 className="font-semibold">{result.title || '处理失败'}</h3><p className="mt-2 leading-relaxed">{result.message}</p></div>;
+                } else if (result) {
+                    let content = null;
+                    if (result.kind === 'paragraph-analysis') {
+                        content = result.data?.complexSentences?.length ? <SyntaxBreakdowns data={result.data} /> : <p className="text-gray-400">当前段落未识别到复杂句。</p>;
+                    } else if (result.kind === 'document-translation') {
+                        content = <div className="space-y-3">{(result.data?.translations || []).map((paragraph, index) => <p key={index} className="leading-[1.8] text-[14px]">{paragraph}</p>)}</div>;
+                    } else if (result.kind === 'document-logic') {
+                        const logic = result.data || {};
+                        content = (
+                            <div className="space-y-4">
+                                {logic.coreMeaning && <div className="p-3 bg-teal-50 dark:bg-teal-900/15 border-l-2 border-teal-500"><div className="text-[11px] font-medium text-teal-700 dark:text-teal-300">核心主旨</div><p className="mt-1 leading-relaxed font-medium">{logic.coreMeaning}</p></div>}
+                                {logic.logicalStructure && <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">逻辑结构</h4><p className="mt-2 leading-relaxed text-gray-600 dark:text-gray-300">{logic.logicalStructure}</p></div>}
+                                {logic.referenceAnalysis?.length > 0 && <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">指代与连贯</h4><ul className="mt-2 space-y-1.5 list-disc pl-5">{logic.referenceAnalysis.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+                                {logic.trapIdentification && logic.trapIdentification !== '无' && <div className="p-3 bg-red-50 dark:bg-red-900/15 border-l-2 border-red-400"><div className="font-semibold text-red-700 dark:text-red-300">命题陷阱</div><p className="mt-1 leading-relaxed">{logic.trapIdentification}</p></div>}
                             </div>
-                            {result.sourceText && <blockquote className="mt-3 pl-3 border-l-2 border-sky-300 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400 line-clamp-4">“{result.sourceText}”</blockquote>}
-                        </div>
-                        {content || <p className="text-gray-400">暂无可显示结果。</p>}
-                    </div>
-                );
+                        );
+                    }
+                    currentBlock = (
+                        <section className="space-y-4">
+                            <div className="pb-3 border-b border-gray-200 dark:border-gray-700">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div><h3 className="font-semibold text-gray-900 dark:text-gray-100">{result.title || '精读结果'}</h3><p className="mt-1 text-[11px] text-gray-400">{Number.isFinite(result.paragraphIndex) ? `第 ${result.paragraphIndex + 1} 段` : '全文'} · 当前结果</p></div>
+                                    <button onClick={() => setRightPanelAnalysis(null)} className="w-7 h-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" aria-label="清空当前精读结果">×</button>
+                                </div>
+                                {result.sourceText && <blockquote className="mt-3 pl-3 border-l-2 border-sky-300 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400 line-clamp-4">“{result.sourceText}”</blockquote>}
+                            </div>
+                            {content || <p className="text-gray-400">暂无可显示结果。</p>}
+                        </section>
+                    );
+                }
+
+                return <div className="space-y-6">{translationCards}{currentBlock}</div>;
             };
 
             const readerToolbarIconClass = (active = false) => `w-9 h-9 shrink-0 grid place-items-center rounded-sm border transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${active ? 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700' : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-sky-700 dark:hover:text-sky-300'}`;
@@ -5005,6 +5129,19 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 onPersistParagraphResult={handlePersistParagraphResult}
                                                 onOpenAnalysis={(result) => {
                                                     if (layoutMode === 'split' && rightPanelOpen) {
+                                                        if (result.kind === 'paragraph-quiz') {
+                                                            setPracticePanelResult(result);
+                                                            setRightPanelTab('quiz');
+                                                            return;
+                                                        }
+                                                        if (result.kind === 'paragraph-translation') {
+                                                            setRightPanelTranslationStack(previous => {
+                                                                const next = previous.filter(item => item.paragraphIndex !== result.paragraphIndex);
+                                                                return [...next, result].sort((a, b) => a.paragraphIndex - b.paragraphIndex);
+                                                            });
+                                                            setRightPanelTab('analysis');
+                                                            return;
+                                                        }
                                                         setRightPanelAnalysis(result);
                                                         setRightPanelTab('analysis');
                                                     }
@@ -5069,7 +5206,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                             <div className="flex items-center gap-1 p-2 border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80">
                                                 {[
                                                     ['outline', '全文结构'],
-                                                    ['mindmap', '思维导图'],
+                                                    ['quiz', '模拟习题'],
                                                     ['analysis', '精读结果'],
                                                     ['notes', `学习笔记${currentAnnotations.length ? ` ${currentAnnotations.length}` : ''}`]
                                                 ].map(([tab, label]) => (
@@ -5078,9 +5215,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 <button onClick={() => setRightPanelOpen(false)} aria-label="关闭侧栏" className="w-8 h-8 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">×</button>
                                             </div>
                                             <div className="reader-side-scroll custom-scrollbar p-4 text-[13px] text-gray-700 dark:text-gray-300">
-                                                {rightPanelTab === 'outline' && (fullMapData?.mindmap ? <div className="space-y-3"><div className="flex items-center justify-between"><span className="text-[11px] text-gray-400">全文结构 · 双语</span><button onClick={openMapEditorModal} className="min-h-[30px] px-2 text-[11px] border border-gray-200 dark:border-gray-700 rounded-sm hover:bg-white dark:hover:bg-gray-800">全屏编辑</button></div><LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode="bilingual" collapsedNodes={collapsedMapNodes} onToggle={toggleMapNode} /></div> : isAnalyzingMap ? <div className="py-10 text-center"><div className="mx-auto w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-3 text-gray-500">正在生成全文结构…</p></div> : <div className="py-8 text-center"><p className="text-gray-400 dark:text-gray-500">尚未生成全文结构。</p><button onClick={handleFullOutlineTool} className="mt-4 min-h-[38px] px-4 rounded-sm border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800">生成全文结构</button></div>)}
-                                                {rightPanelTab === 'mindmap' && (fullMapData?.mindmap ? (
-                                                    <div className="space-y-3" data-reader-mindmap-panel="true">
+                                                {rightPanelTab === 'outline' && (fullMapData?.mindmap ? (
+                                                    <div className="space-y-3" data-reader-structure-combined="true">
                                                         <div className="flex flex-wrap items-center justify-between gap-2">
                                                             <div className="flex items-center p-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-sm">
                                                                 {[
@@ -5091,16 +5227,24 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                                     <button key={mode} onClick={() => setMapMode(mode)} className={`min-h-[28px] px-2 text-[11px] rounded-[2px] ${mapMode === mode ? 'bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>{label}</button>
                                                                 ))}
                                                             </div>
-                                                            <button onClick={openMapEditorModal} className="min-h-[30px] px-2 text-[11px] border border-gray-200 dark:border-gray-700 rounded-sm hover:bg-white dark:hover:bg-gray-800">全屏编辑</button>
+                                                            <div className="flex items-center gap-1">
+                                                                <button type="button" data-reader-structure-view-toggle="true" onClick={() => setStructureViewMode(previous => previous === 'tree' ? 'mindmap' : 'tree')} className={`w-8 h-8 grid place-items-center border rounded-sm ${structureViewMode === 'mindmap' ? 'border-sky-300 bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-300' : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-white dark:hover:bg-gray-800'}`} title={structureViewMode === 'tree' ? '切换为思维导图' : '切换为结构树'} aria-label={structureViewMode === 'tree' ? '切换为思维导图' : '切换为结构树'}>
+                                                                    {structureViewMode === 'tree' ? <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/><path d="M12 7v4M6 16v-2h12v2M12 11H6M12 11h6"/></svg> : <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 5h7v4H4zM13 15h7v4h-7zM13 5h7v4h-7zM4 15h7v4H4zM11 7h2M11 17h2M8 9v6M16 9v6"/></svg>}
+                                                                </button>
+                                                                <button onClick={openMapEditorModal} className="min-h-[30px] px-2 text-[11px] border border-gray-200 dark:border-gray-700 rounded-sm hover:bg-white dark:hover:bg-gray-800">全屏编辑</button>
+                                                            </div>
                                                         </div>
-                                                        <p className="text-[10px] text-gray-400">与全文结构共用同一份数据，不会重复调用模型。</p>
-                                                        <MindMapCanvas mindmap={fullMapData.mindmap} displayMode={mapMode} />
+                                                        <p className="text-[10px] text-gray-400">结构树与思维导图共用同一份数据，切换不会重复调用模型。</p>
+                                                        {structureViewMode === 'tree'
+                                                            ? <LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode={mapMode} collapsedNodes={collapsedMapNodes} onToggle={toggleMapNode} />
+                                                            : <MindMapCanvas mindmap={fullMapData.mindmap} displayMode={mapMode} />}
                                                     </div>
                                                 ) : isAnalyzingMap ? (
-                                                    <div className="py-10 text-center"><div className="mx-auto w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-3 text-gray-500">正在生成思维导图…</p></div>
+                                                    <div className="py-10 text-center"><div className="mx-auto w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-3 text-gray-500">正在生成全文结构…</p></div>
                                                 ) : (
-                                                    <div className="py-8 text-center" data-reader-mindmap-empty="true"><p className="text-gray-400 dark:text-gray-500">尚未生成思维导图。</p><button onClick={async () => { setRightPanelTab('mindmap'); await handleGenerateSummary(); }} className="mt-4 min-h-[38px] px-4 rounded-sm border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800">生成思维导图</button></div>
+                                                    <div className="py-8 text-center"><p className="text-gray-400 dark:text-gray-500">尚未生成全文结构。</p><button onClick={handleFullOutlineTool} className="mt-4 min-h-[38px] px-4 rounded-sm border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800">生成全文结构</button></div>
                                                 ))}
+                                                {rightPanelTab === 'quiz' && renderPracticePanel()}
                                                 {rightPanelTab === 'analysis' && renderRightPanelAnalysis()}
                                                 {rightPanelTab === 'notes' && (
                                                     <div className="space-y-4">
