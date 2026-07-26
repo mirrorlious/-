@@ -1,0 +1,4 @@
+exit_code=1
+commit=d4b4f0a04425eed1559bb0f34513938d1b6027b6
+---- output ----
+Missing repair markers: ["extractionMethod: 'text-raw'"]
