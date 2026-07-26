@@ -1,0 +1,77 @@
+name: Apply four reading panel improvements once
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+
+      - name: Apply four scoped improvements
+        shell: bash
+        run: python scripts/one_shot_four_panel_improvements.py
+
+      - name: Validate source
+        shell: bash
+        run: |
+          git diff --check
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              "['outline', 'quiz', 'analysis', 'notes']",
+              "['quiz', '模拟习题']",
+              'data-reader-structure-view-toggle="true"',
+              "structureViewMode === 'tree' ? 'mindmap' : 'tree'",
+              "rightPanelTab === 'quiz' && renderPracticePanel()",
+              'data-reader-practice-panel="document"',
+              'data-reader-translation-stack="true"',
+              'setRightPanelTranslationStack(previous =>',
+              '>添加笔记</button>',
+              'data-reader-note-flag="true"'
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit(f'Missing markers: {missing}')
+          if "['mindmap', '思维导图']" in text:
+              raise SystemExit('Legacy mindmap tab remains')
+          if text.count('<script') != text.count('</script>'):
+              raise SystemExit('Script tag count mismatch')
+          marker = '<script type="text/babel" data-type="module">'
+          start = text.index(marker) + len(marker)
+          end = text.index('</script>', start)
+          Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
+          print('Static markers passed')
+          PY
+          npm init -y >/tmp/npm.log 2>&1
+          npm install --no-save @babel/core @babel/preset-react >>/tmp/npm.log 2>&1
+          node - <<'NODE'
+          const fs = require('fs');
+          const babel = require('@babel/core');
+          babel.transformSync(fs.readFileSync('/tmp/reader.jsx', 'utf8'), {
+            filename: 'index.jsx',
+            sourceType: 'module',
+            presets: [['@babel/preset-react', { runtime: 'classic' }]]
+          });
+          console.log('Babel JSX parse passed');
+          NODE
+
+      - name: Commit improvements
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: reorganize learning panel and selection notes"
+          git push origin HEAD:feat/reader-annotations-v2
