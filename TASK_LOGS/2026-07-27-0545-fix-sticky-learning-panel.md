@@ -2,7 +2,7 @@
 
 - 时间：2026-07-27
 - 执行者：ChatGPT
-- 状态：开发中
+- 状态：部分完成
 - 项目：杨的阅读器
 - 仓库：`mirrorlious/-`
 - 工作分支：`feat/reader-annotations-v2`
@@ -34,11 +34,19 @@
 
 ## 5. 实际修改
 
-开发中。
+- 根页面容器新增 `reader-page-shell`，横向裁切改用 `overflow-x: clip`，不再创建错误的 sticky 滚动包含块。
+- 阅读模式 `<main>` 改为 `overflow-visible`；首页和 PDF 模式继续保留 `overflow-hidden`。
+- 工作区和正文列显式保持 `overflow: visible`。
+- 学习侧栏补充 `position: -webkit-sticky`，高度改用动态视口单位 `100dvh`，并设置稳定层级。
+- 侧栏标签栏继续位于独立滚动区之外，只有内容区域内部滚动。
 
 ## 6. 测试
 
-待执行。
+- 修复标记检查：通过。
+- 旧 `overflow-x-hidden` 页面根类移除检查：通过。
+- `git diff --check`：由一次性工作流执行。
+- Babel JSX 解析：由一次性工作流执行。
+- 浏览器真实滚动：等待用户本地复测。
 
 ## 7. 回滚方式
 

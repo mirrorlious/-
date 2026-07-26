@@ -83,6 +83,10 @@
             min-width: 0;
         }
 
+        .reader-page-shell {
+            overflow-x: clip;
+        }
+
         .reader-workspace-split {
             display: grid;
             grid-template-columns: minmax(0, 58fr) minmax(360px, 42fr);
@@ -90,11 +94,16 @@
             align-items: start;
             width: 100%;
             padding-inline: clamp(8px, 1vw, 18px);
+            overflow: visible;
         }
 
         .reader-main-column,
         .reader-side-panel {
             min-width: 0;
+        }
+
+        .reader-main-column {
+            overflow: visible;
         }
 
         .reader-workspace-focus .reader-main-column {
@@ -140,13 +149,15 @@
         }
 
         .reader-side-panel {
+            position: -webkit-sticky;
             position: sticky;
             top: 72px;
-            height: calc(100vh - 80px);
-            max-height: none;
+            height: calc(100dvh - 80px);
+            max-height: calc(100dvh - 80px);
             overflow: hidden;
             align-self: start;
             min-height: 0;
+            z-index: 20;
         }
 
         .reader-side-shell {
@@ -3461,7 +3472,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
             return (
                 <div className={`reader-theme-root ${typographyConfig.theme === 'dark' ? 'dark' : ''}`}>
-                    <div className={`min-h-screen bg-[#F9FAFB] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans pb-24 relative overflow-x-hidden transition-colors duration-300 ${isImmersive ? 'reader-immersive' : ''}`}>
+                    <div className={`reader-page-shell min-h-screen bg-[#F9FAFB] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans pb-24 relative transition-colors duration-300 ${isImmersive ? 'reader-immersive' : ''}`}>
                         
                         {/* 排版设置弹窗 */}
                         {isTypographyModalOpen && (
@@ -3868,7 +3879,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                             </div>
                         </header>
 
-                        <main className={`${isReadingMode || isPdfMode ? 'w-full max-w-none my-0 sm:my-0 sm:border-x-0 sm:rounded-none min-h-[calc(100vh-64px)]' : 'max-w-[1200px] sm:my-8'} mx-auto bg-white dark:bg-gray-900 sm:border border-gray-200 dark:border-gray-800 sm:rounded-sm min-h-[85vh] transition-colors overflow-hidden`}>
+                        <main className={`${isReadingMode || isPdfMode ? 'w-full max-w-none my-0 sm:my-0 sm:border-x-0 sm:rounded-none min-h-[calc(100vh-64px)]' : 'max-w-[1200px] sm:my-8'} mx-auto bg-white dark:bg-gray-900 sm:border border-gray-200 dark:border-gray-800 sm:rounded-sm min-h-[85vh] transition-colors ${isReadingMode ? 'overflow-visible' : 'overflow-hidden'}`}>
                             {isPdfMode && pdfFile ? (
                                 <PdfReader file={pdfFile} onClose={closePdfReader} onExtract={extractCurrentPdf} isExtractingText={isExtracting} extractionProgress={pdfExtractionProgress} />
                             ) : !isReadingMode ? (
