@@ -382,7 +382,7 @@ index.html
 ![Accepted](https://img.shields.io/badge/Browser%20Acceptance-Passed-22c55e?style=flat-square)
 ![JSX](https://img.shields.io/badge/Babel%20JSX-Parsed-2563eb?style=flat-square)
 ![Diff](https://img.shields.io/badge/git%20diff--check-Passed-14b8a6?style=flat-square)
-![PR](https://img.shields.io/badge/PR%20%238-Ready%20for%20Review-f59e0b?style=flat-square)
+![PR](https://img.shields.io/badge/PR%20%238-Accepted%20Draft-f59e0b?style=flat-square)
 
 本轮已完成浏览器验收，功能分支为：
 
