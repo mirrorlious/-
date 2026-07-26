@@ -1856,6 +1856,16 @@ ${JSON.stringify(miniCorpus, null, 2)}
             });
         };
 
+        const deleteReaderStore = async (storeName, key) => {
+            const db = await openReaderDb();
+            if (!db) return false;
+            return new Promise(resolve => {
+                const request = db.transaction(storeName, 'readwrite').objectStore(storeName).delete(key);
+                request.onsuccess = () => resolve(true);
+                request.onerror = () => resolve(false);
+            });
+        };
+
         const hashText = async (value) => {
             const bytes = new TextEncoder().encode(value);
             if (window.crypto?.subtle) {
@@ -2724,6 +2734,15 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 setPdfExtractionProgress({ current: 0, total: 0 });
                 let loadingTask = null;
                 let pdfDocument = null;
+                const diagnostics = {
+                    cached: 0,
+                    structuredText: 0,
+                    rawText: 0,
+                    ocr: 0,
+                    ocrFailed: 0,
+                    empty: 0,
+                    pageErrors: []
+                };
 
                 try {
                     const pdfjs = await waitForPdfJs();
@@ -2734,51 +2753,152 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                     const taskKey = `pdf:${await hashText(`${file.name}:${file.size}:${file.lastModified}`)}`;
                     const savedTask = await readReaderStore('pdf-tasks', taskKey);
-                    const extractedPages = Array.isArray(savedTask?.pages) ? [...savedTask.pages] : [];
-                    const completedPages = Math.min(savedTask?.completedPages || 0, pdfDocument.numPages);
-                    if (completedPages > 0) setPdfExtractionProgress({ current: completedPages, total: pdfDocument.numPages });
-                    for (let pageNumber = completedPages + 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
-                        const page = await pdfDocument.getPage(pageNumber);
-                        const viewport = page.getViewport({ scale: 1 });
-                        const textContent = await page.getTextContent();
-                        const lines = pdfItemsToLines(textContent.items, viewport.width);
-                        const pageParagraphs = pdfLinesToParagraphs(lines, viewport.width);
-                        let pageText = pageParagraphs.join("\n\n").trim();
-                        let usedOcr = false;
-                        if (pageText.length < 80) {
-                            const ocrViewport = page.getViewport({ scale: 1.6 });
-                            const canvas = document.createElement('canvas');
-                            const context = canvas.getContext('2d', { alpha: false });
-                            canvas.width = Math.ceil(ocrViewport.width);
-                            canvas.height = Math.ceil(ocrViewport.height);
-                            await page.render({ canvasContext: context, viewport: ocrViewport }).promise;
-                            const imageData = canvas.toDataURL('image/jpeg', 0.86).split(',')[1];
-                            pageText = normalizeBookText(await extractTextFromMedia(imageData, 'image/jpeg', apiConfig));
-                            canvas.width = 1;
-                            canvas.height = 1;
-                            usedOcr = true;
+                    const cachedPages = new Map(
+                        (Array.isArray(savedTask?.pages) ? savedTask.pages : [])
+                            .filter(page => Number.isFinite(page?.pageNumber))
+                            .map(page => [page.pageNumber, page])
+                    );
+                    const extractedPages = [];
+
+                    for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
+                        const cachedPage = cachedPages.get(pageNumber);
+                        const cachedText = normalizeBookText(cachedPage?.text || '');
+                        const cachedIsUsable = cachedText.length >= 40 && cachedPage?.invalid !== true;
+
+                        if (cachedIsUsable) {
+                            extractedPages.push({
+                                ...cachedPage,
+                                pageNumber,
+                                text: cachedText,
+                                processed: true,
+                                extractionMethod: cachedPage.extractionMethod || 'cache'
+                            });
+                            diagnostics.cached += 1;
+                            setPdfExtractionProgress({ current: pageNumber, total: pdfDocument.numPages });
+                            continue;
                         }
-                        extractedPages.push({ pageNumber, text: pageText, usedOcr });
-                        page.cleanup();
-                        await writeReaderStore('pdf-tasks', { key: taskKey, fileName: file.name, totalPages: pdfDocument.numPages, completedPages: pageNumber, pages: extractedPages, updatedAt: Date.now() });
+
+                        let page = null;
+                        let pageText = '';
+                        let extractionMethod = 'empty';
+                        let usedOcr = false;
+                        let pageError = '';
+
+                        try {
+                            page = await pdfDocument.getPage(pageNumber);
+                            const viewport = page.getViewport({ scale: 1 });
+                            const textContent = await page.getTextContent();
+                            const lines = pdfItemsToLines(textContent.items, viewport.width);
+                            const structuredText = normalizeBookText(pdfLinesToParagraphs(lines, viewport.width).join('\n\n'));
+                            const rawText = normalizeBookText(cleanPdfText(
+                                textContent.items
+                                    .map(item => typeof item.str === 'string' ? item.str : '')
+                                    .filter(Boolean)
+                                    .join(' ')
+                            ));
+
+                            if (structuredText.length >= 80) {
+                                pageText = structuredText;
+                                extractionMethod = 'text-structured';
+                                diagnostics.structuredText += 1;
+                            } else if (rawText.length >= 80) {
+                                pageText = rawText;
+                                extractionMethod = 'text-raw';
+                                diagnostics.rawText += 1;
+                            } else {
+                                try {
+                                    const ocrViewport = page.getViewport({ scale: 1.75 });
+                                    const canvas = document.createElement('canvas');
+                                    const context = canvas.getContext('2d', { alpha: false });
+                                    canvas.width = Math.ceil(ocrViewport.width);
+                                    canvas.height = Math.ceil(ocrViewport.height);
+                                    await page.render({ canvasContext: context, viewport: ocrViewport }).promise;
+                                    const imageData = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+                                    const ocrText = normalizeBookText(await extractTextFromMedia(imageData, 'image/jpeg', apiConfig));
+                                    canvas.width = 1;
+                                    canvas.height = 1;
+                                    usedOcr = true;
+
+                                    if (ocrText.length >= 40) {
+                                        pageText = ocrText;
+                                        extractionMethod = 'ocr';
+                                        diagnostics.ocr += 1;
+                                    } else {
+                                        pageText = structuredText.length >= rawText.length ? structuredText : rawText;
+                                        extractionMethod = pageText ? 'text-short' : 'empty';
+                                        diagnostics.empty += pageText ? 0 : 1;
+                                    }
+                                } catch (ocrError) {
+                                    diagnostics.ocrFailed += 1;
+                                    pageError = `OCR失败：${ocrError.message}`;
+                                    pageText = structuredText.length >= rawText.length ? structuredText : rawText;
+                                    extractionMethod = pageText ? 'text-short' : 'empty';
+                                    if (!pageText) diagnostics.empty += 1;
+                                }
+                            }
+                        } catch (error) {
+                            pageError = error.message || String(error);
+                            diagnostics.pageErrors.push({ pageNumber, message: pageError });
+                            diagnostics.empty += 1;
+                        } finally {
+                            if (page) {
+                                try { page.cleanup(); } catch (error) {}
+                            }
+                        }
+
+                        const pageRecord = {
+                            pageNumber,
+                            text: normalizeBookText(pageText),
+                            usedOcr,
+                            processed: true,
+                            extractionMethod,
+                            error: pageError || '',
+                            invalid: false
+                        };
+                        extractedPages.push(pageRecord);
+
+                        await writeReaderStore('pdf-tasks', {
+                            key: taskKey,
+                            fileName: file.name,
+                            fileSize: file.size,
+                            fileLastModified: file.lastModified,
+                            totalPages: pdfDocument.numPages,
+                            completedPages: pageNumber,
+                            pages: extractedPages,
+                            diagnostics,
+                            updatedAt: Date.now()
+                        });
 
                         setPdfExtractionProgress({ current: pageNumber, total: pdfDocument.numPages });
                         if (pageNumber % 3 === 0) await new Promise(resolve => setTimeout(resolve, 0));
                     }
 
-                    const totalText = extractedPages.map(page => page.text).join("\n\n").trim();
+                    const readablePages = extractedPages.filter(page => normalizeBookText(page.text).length >= 40);
+                    const totalText = normalizeBookText(readablePages.map(page => page.text).join('\n\n'));
+
                     if (totalText.length < 80) {
-                        throw new Error("未能识别到足够正文，请检查OCR模型与文件清晰度。");
+                        await deleteReaderStore('pdf-tasks', taskKey);
+                        const details = [
+                            `共 ${pdfDocument.numPages} 页`,
+                            `可读页 ${readablePages.length}`,
+                            `缓存命中 ${diagnostics.cached}`,
+                            `OCR成功 ${diagnostics.ocr}`,
+                            `OCR失败 ${diagnostics.ocrFailed}`,
+                            `空页 ${diagnostics.empty}`,
+                            diagnostics.pageErrors.length ? `页面错误 ${diagnostics.pageErrors.length}` : ''
+                        ].filter(Boolean).join('，');
+                        throw new Error(`未提取到足够正文（${details}）。已清除无效缓存，请检查PDF文字层或OCR配置后重试。`);
                     }
+
                     const sourceHash = await hashText(`${file.name}:${file.size}:${file.lastModified}`);
                     const session = await prepareBookImport({ sourceName: file.name, sourceHash, pages: extractedPages });
                     setPendingPdfFile(null);
                     setIsPdfChoiceOpen(false);
                     setIsPdfMode(false);
                     setPdfFile(null);
-                    window.showToast(`已识别 ${session.articles.length} 篇文章，忽略 ${session.ignored.length} 个目录、封面或低信息页`, "success");
+                    window.showToast(`已识别 ${session.articles.length} 篇文章，忽略 ${session.ignored.length} 个目录、封面或低信息页`, 'success');
                 } catch (error) {
-                    window.showToast(`PDF 本地提取失败：${error.message}`, "error");
+                    window.showToast(`PDF 本地提取失败：${error.message}`, 'error');
                 } finally {
                     setIsExtracting(false);
                     setPdfExtractionProgress({ current: 0, total: 0 });
@@ -3429,7 +3549,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         )}
 
                         <header className="bg-white/95 dark:bg-gray-900/95 backdrop-blur sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800 transition-colors">
-                            <div className="max-w-[960px] mx-auto h-16 px-3 sm:px-5 flex items-center gap-3">
+                            <div className={`${isPdfMode ? 'max-w-[1400px]' : layoutMode === 'split' ? 'max-w-[1480px]' : layoutMode === 'focus' ? 'max-w-[1120px]' : 'max-w-[1200px]'} mx-auto h-16 px-3 sm:px-5 flex items-center gap-3`}>
                                 <div className="relative min-w-0 flex-1 flex items-center gap-2">
                                     <button onClick={() => setIsHeaderMenuOpen(prev => !prev)} className="w-10 h-10 shrink-0 grid place-items-center rounded-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="打开主菜单" title="主菜单">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
