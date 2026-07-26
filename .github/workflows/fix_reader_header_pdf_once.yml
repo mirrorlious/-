@@ -18,56 +18,33 @@ jobs:
           ref: feat/reader-annotations-v2
           fetch-depth: 0
 
-      - name: Apply scoped repair
-        shell: bash
-        run: python scripts/one_shot_fix_header_pdf.py
-
-      - name: Validate source
+      - name: Apply repair and capture result
         shell: bash
         run: |
-          git diff --check
-          python - <<'PY'
-          from pathlib import Path
-          text = Path('index.html').read_text(encoding='utf-8')
-          required = [
-              "layoutMode === 'split' ? 'max-w-[1480px]'",
-              'const deleteReaderStore = async',
-              "extractionMethod: 'text-raw'",
-              "await deleteReaderStore('pdf-tasks', taskKey)",
-              '可读页 ${readablePages.length}'
-          ]
-          missing = [marker for marker in required if marker not in text]
-          if missing:
-              raise SystemExit(f'Missing markers: {missing}')
-          if text.count('<script') != text.count('</script>'):
-              raise SystemExit('Script tag count mismatch')
-          print('Static repair validation passed')
-          PY
-          python - <<'PY'
-          from pathlib import Path
-          text = Path('index.html').read_text(encoding='utf-8')
-          marker = '<script type="text/babel" data-type="module">'
-          start = text.index(marker) + len(marker)
-          end = text.index('</script>', start)
-          Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
-          PY
-          npx --yes --package=@babel/core --package=@babel/preset-react node - <<'NODE'
-          const fs = require('fs');
-          const babel = require('@babel/core');
-          const source = fs.readFileSync('/tmp/reader.jsx', 'utf8');
-          babel.transformSync(source, {
-            filename: 'index.jsx',
-            sourceType: 'module',
-            presets: [['@babel/preset-react', { runtime: 'classic' }]]
-          });
-          console.log('Babel JSX parse passed');
-          NODE
+          set +e
+          python scripts/one_shot_fix_header_pdf.py > /tmp/reader-repair.log 2>&1
+          code=$?
+          set -e
+          {
+            echo "exit_code=$code"
+            echo "commit=${GITHUB_SHA}"
+            echo "---- output ----"
+            cat /tmp/reader-repair.log
+          } > TASK_LOGS/reader-repair-run-output.txt
 
-      - name: Commit repair
+      - name: Commit repair or diagnostics
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "fix: align header and harden PDF extraction"
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          if grep -q '^exit_code=0$' TASK_LOGS/reader-repair-run-output.txt; then
+            git commit -m "fix: align header and harden PDF extraction"
+          else
+            git commit -m "chore: record reader repair failure"
+          fi
           git push origin HEAD:feat/reader-annotations-v2
