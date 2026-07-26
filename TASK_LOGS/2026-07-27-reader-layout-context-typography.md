@@ -137,3 +137,18 @@ GitHub：未上传，等待用户本地验收。
 - Added one-time-compatible migration defaults for existing typography settings and retained local persistence through the existing state key.
 - Validation: typography modal opened successfully with preset, measure, and preview controls; stage-9 page rendered without visible Babel compilation error text.
 - Next: perform visual/accessibility regression and final manual acceptance.
+
+## 16. Stage 10: Visual, accessibility, and performance pass
+
+- Status: completed locally.
+- Added accessible names/pressed states for layout and panel controls, a labeled panel, a labeled paragraph action menu, and selection toolbar semantics.
+- Kept the right panel independently scrollable and constrained the responsive layout below 1200px to avoid horizontal overflow.
+- No new font asset, network upload, or unrelated business logic was introduced.
+
+## 17. Stage 11: Regression checkpoint
+
+- Status: completed locally; awaiting user manual acceptance.
+- Tests: `http://localhost:5173/?final=1` returned HTTP 200; final page rendered the sample reader; focus mode hid the right panel; split mode restored it; `git diff --check` passed.
+- Worktree is clean on local branch `feat/reader-layout-context-typography`.
+- Known manual checks: drag-select text and verify the floating toolbar positioning; test browser fullscreen permission behavior; verify typography on the target machines' installed fonts.
+- Next user action: perform the manual acceptance checklist. Do not push, merge, create a PR, or upload to GitHub.
