@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply-fix:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout feature branch
@@ -19,256 +18,31 @@ jobs:
           ref: feat/reader-annotations-v2
           fetch-depth: 0
 
-      - name: Patch header width and PDF extraction
+      - name: Apply scoped repair
+        shell: bash
+        run: python scripts/one_shot_fix_header_pdf.py
+
+      - name: Validate source
         shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('index.html')
-          text = path.read_text(encoding='utf-8')
-
-          old_header = '<div className="max-w-[960px] mx-auto h-16 px-3 sm:px-5 flex items-center gap-3">'
-          new_header = "<div className={`${isPdfMode ? 'max-w-[1400px]' : layoutMode === 'split' ? 'max-w-[1480px]' : layoutMode === 'focus' ? 'max-w-[1120px]' : 'max-w-[1200px]'} mx-auto h-16 px-3 sm:px-5 flex items-center gap-3`}>"
-          if old_header not in text:
-              raise SystemExit('Header width anchor not found')
-          text = text.replace(old_header, new_header, 1)
-
-          write_store_anchor = '''        const writeReaderStore = async (storeName, value) => {
-            const db = await openReaderDb();
-            if (!db) return false;
-            return new Promise(resolve => {
-                const request = db.transaction(storeName, 'readwrite').objectStore(storeName).put(value);
-                request.onsuccess = () => resolve(true);
-                request.onerror = () => resolve(false);
-            });
-        };
-'''
-          delete_store_helper = '''
-        const deleteReaderStore = async (storeName, key) => {
-            const db = await openReaderDb();
-            if (!db) return false;
-            return new Promise(resolve => {
-                const request = db.transaction(storeName, 'readwrite').objectStore(storeName).delete(key);
-                request.onsuccess = () => resolve(true);
-                request.onerror = () => resolve(false);
-            });
-        };
-'''
-          if 'const deleteReaderStore = async' not in text:
-              if write_store_anchor not in text:
-                  raise SystemExit('IndexedDB helper anchor not found')
-              text = text.replace(write_store_anchor, write_store_anchor + delete_store_helper, 1)
-
-          function_start = text.index('            const extractPdfTextLocally = async (file) => {')
-          function_end = text.index('\n\n            const extractFilesToText = async (files) => {', function_start)
-          new_function = r'''            const extractPdfTextLocally = async (file) => {
-                setIsExtracting(true);
-                setPdfExtractionProgress({ current: 0, total: 0 });
-                let loadingTask = null;
-                let pdfDocument = null;
-                const diagnostics = {
-                    cached: 0,
-                    structuredText: 0,
-                    rawText: 0,
-                    ocr: 0,
-                    ocrFailed: 0,
-                    empty: 0,
-                    pageErrors: []
-                };
-
-                try {
-                    const pdfjs = await waitForPdfJs();
-                    const data = new Uint8Array(await file.arrayBuffer());
-                    loadingTask = pdfjs.getDocument({ data });
-                    pdfDocument = await loadingTask.promise;
-                    setPdfExtractionProgress({ current: 0, total: pdfDocument.numPages });
-
-                    const taskKey = `pdf:${await hashText(`${file.name}:${file.size}:${file.lastModified}`)}`;
-                    const savedTask = await readReaderStore('pdf-tasks', taskKey);
-                    const cachedPages = new Map(
-                        (Array.isArray(savedTask?.pages) ? savedTask.pages : [])
-                            .filter(page => Number.isFinite(Number(page?.pageNumber)))
-                            .map(page => [Number(page.pageNumber), page])
-                    );
-                    const extractedPages = [];
-
-                    for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
-                        const cachedPage = cachedPages.get(pageNumber);
-                        const cachedText = normalizeBookText(cachedPage?.text || '');
-                        const canReuseCache = Boolean(cachedPage) && (cachedPage.processed === true || cachedText.length >= 20);
-
-                        if (canReuseCache) {
-                            extractedPages.push({ ...cachedPage, pageNumber, text: cachedText, processed: true });
-                            diagnostics.cached += 1;
-                            setPdfExtractionProgress({ current: pageNumber, total: pdfDocument.numPages });
-                            continue;
-                        }
-
-                        let page = null;
-                        let pageText = '';
-                        let usedOcr = false;
-                        let extractionMethod = 'empty';
-                        let pageError = '';
-
-                        try {
-                            page = await pdfDocument.getPage(pageNumber);
-                            const viewport = page.getViewport({ scale: 1 });
-                            const textContent = await page.getTextContent();
-                            const lines = pdfItemsToLines(textContent.items, viewport.width);
-                            const structuredText = normalizeBookText(pdfLinesToParagraphs(lines, viewport.width).join("\n\n"));
-                            const rawLayerText = cleanPdfText(
-                                textContent.items
-                                    .map(item => typeof item?.str === 'string' ? item.str : '')
-                                    .filter(Boolean)
-                                    .join(' ')
-                            );
-
-                            if (structuredText.length >= 80) {
-                                pageText = structuredText;
-                                extractionMethod = 'structured-text-layer';
-                                diagnostics.structuredText += 1;
-                            } else if (rawLayerText.length > structuredText.length) {
-                                pageText = rawLayerText;
-                                extractionMethod = 'raw-text-layer';
-                                if (pageText.length >= 20) diagnostics.rawText += 1;
-                            } else {
-                                pageText = structuredText;
-                                extractionMethod = pageText.length >= 20 ? 'short-structured-text-layer' : 'empty';
-                                if (pageText.length >= 20) diagnostics.structuredText += 1;
-                            }
-
-                            if (pageText.length < 40) {
-                                usedOcr = true;
-                                try {
-                                    const ocrViewport = page.getViewport({ scale: 1.7 });
-                                    const canvas = document.createElement('canvas');
-                                    const context = canvas.getContext('2d', { alpha: false });
-                                    canvas.width = Math.ceil(ocrViewport.width);
-                                    canvas.height = Math.ceil(ocrViewport.height);
-                                    await page.render({ canvasContext: context, viewport: ocrViewport }).promise;
-                                    const imageData = canvas.toDataURL('image/jpeg', 0.88).split(',')[1];
-                                    const ocrText = normalizeBookText(await extractTextFromMedia(imageData, 'image/jpeg', apiConfig));
-                                    canvas.width = 1;
-                                    canvas.height = 1;
-                                    if (ocrText.length > pageText.length) {
-                                        pageText = ocrText;
-                                        extractionMethod = 'ocr';
-                                        diagnostics.ocr += 1;
-                                    }
-                                } catch (ocrError) {
-                                    diagnostics.ocrFailed += 1;
-                                    pageError = `OCR: ${ocrError.message || '识别失败'}`;
-                                }
-                            }
-                        } catch (error) {
-                            pageError = error.message || '页面读取失败';
-                            diagnostics.pageErrors.push({ pageNumber, message: pageError });
-                        } finally {
-                            if (page) {
-                                try { page.cleanup(); } catch (error) {}
-                            }
-                        }
-
-                        pageText = normalizeBookText(pageText);
-                        if (pageText.length < 20) diagnostics.empty += 1;
-                        const pageRecord = {
-                            pageNumber,
-                            text: pageText,
-                            usedOcr,
-                            processed: true,
-                            extractionMethod,
-                            error: pageError
-                        };
-                        extractedPages.push(pageRecord);
-                        await writeReaderStore('pdf-tasks', {
-                            key: taskKey,
-                            fileName: file.name,
-                            fileSize: file.size,
-                            fileLastModified: file.lastModified,
-                            totalPages: pdfDocument.numPages,
-                            completedPages: pageNumber,
-                            pages: extractedPages,
-                            updatedAt: Date.now()
-                        });
-
-                        setPdfExtractionProgress({ current: pageNumber, total: pdfDocument.numPages });
-                        if (pageNumber % 3 === 0) await new Promise(resolve => setTimeout(resolve, 0));
-                    }
-
-                    const readablePages = extractedPages.filter(page => normalizeBookText(page.text).length >= 40).length;
-                    const totalText = extractedPages.map(page => page.text).filter(Boolean).join("\n\n").trim();
-                    if (totalText.length < 80) {
-                        await deleteReaderStore('pdf-tasks', taskKey);
-                        throw new Error(
-                            `共 ${pdfDocument.numPages} 页，仅 ${readablePages} 页得到可读文字；` +
-                            `OCR失败 ${diagnostics.ocrFailed} 页，空白或低信息 ${diagnostics.empty} 页。` +
-                            `已清除本次无效缓存，请检查 OCR 模型/API 后重试。`
-                        );
-                    }
-
-                    const sourceHash = await hashText(`${file.name}:${file.size}:${file.lastModified}`);
-                    const session = await prepareBookImport({ sourceName: file.name, sourceHash, pages: extractedPages });
-                    setPendingPdfFile(null);
-                    setIsPdfChoiceOpen(false);
-                    setIsPdfMode(false);
-                    setPdfFile(null);
-                    if (diagnostics.ocrFailed || diagnostics.pageErrors.length) {
-                        window.showToast(
-                            `已识别 ${session.articles.length} 篇；${diagnostics.ocrFailed + diagnostics.pageErrors.length} 页处理失败，其余页面已保留。`,
-                            'warning'
-                        );
-                    } else {
-                        window.showToast(
-                            `已识别 ${session.articles.length} 篇文章，忽略 ${session.ignored.length} 个目录、封面或低信息页`,
-                            'success'
-                        );
-                    }
-                } catch (error) {
-                    window.showToast(`PDF 本地提取失败：${error.message}`, "error");
-                } finally {
-                    setIsExtracting(false);
-                    setPdfExtractionProgress({ current: 0, total: 0 });
-                    if (pdfDocument) {
-                        try { await pdfDocument.destroy(); } catch (error) {}
-                    } else if (loadingTask) {
-                        try { await loadingTask.destroy(); } catch (error) {}
-                    }
-                }
-            };'''
-          text = text[:function_start] + new_function + text[function_end:]
-          path.write_text(text, encoding='utf-8')
-          PY
-
-      - name: Validate patched source
-        shell: bash
-        run: |
+          git diff --check
           python - <<'PY'
           from pathlib import Path
           text = Path('index.html').read_text(encoding='utf-8')
           required = [
               "layoutMode === 'split' ? 'max-w-[1480px]'",
               'const deleteReaderStore = async',
-              'raw-text-layer',
-              'canReuseCache',
-              '已清除本次无效缓存',
-              "processed: true",
-              'diagnostics.ocrFailed'
+              "extractionMethod: 'text-raw'",
+              "await deleteReaderStore('pdf-tasks', taskKey)",
+              '可读页 ${readablePages.length}'
           ]
-          missing = [item for item in required if item not in text]
+          missing = [marker for marker in required if marker not in text]
           if missing:
-              raise SystemExit(f'Missing patch markers: {missing}')
-          if 'max-w-[960px] mx-auto h-16' in text:
-              raise SystemExit('Old header width remains')
+              raise SystemExit(f'Missing markers: {missing}')
           if text.count('<script') != text.count('</script>'):
               raise SystemExit('Script tag count mismatch')
-          print('Static validation passed')
+          print('Static repair validation passed')
           PY
-          git diff --check
-
-      - name: Parse JSX with Babel
-        shell: bash
-        run: |
           python - <<'PY'
           from pathlib import Path
           text = Path('index.html').read_text(encoding='utf-8')
@@ -289,44 +63,11 @@ jobs:
           console.log('Babel JSX parse passed');
           NODE
 
-      - name: Finalize task log and remove workflow
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          log = Path('TASK_LOGS/2026-07-27-0435-header-width-pdf-fallback.md')
-          text = log.read_text(encoding='utf-8')
-          text = text.replace('- 状态：开发中', '- 状态：部分完成', 1)
-          text = text.replace('## 7. 实际修改\n\n开发中。', '''## 7. 实际修改
-
-- 顶部栏按 PDF、分栏、专注、标准/首页模式分别使用 1400、1480、1120、1200 px，与主体容器一致。
-- 新增 IndexedDB 单条记录删除助手。
-- PDF 结构化段落不足时，先使用 PDF.js 原始文字层拼接，再决定是否 OCR。
-- 不再按旧 `completedPages` 盲目跳过；改为逐页检查缓存内容与 `processed` 标记。
-- 旧空页面缓存会重新处理，新缓存记录提取方式、OCR状态和错误。
-- 单页 OCR 或页面解析失败不会终止整本任务。
-- 整本无足够正文时自动删除坏缓存，并返回可读页、OCR失败页和空页数量。''')
-          text = text.replace('## 8. 测试\n\n待执行。', '''## 8. 测试
-
-- 静态关键标记检查：通过
-- 旧 960 px 顶栏检查：通过，已移除
-- `git diff --check`：通过
-- Babel JSX 解析：通过
-- 真实 920 页 Economist PDF：待用户本地验收''')
-          text = text.replace('## 9. 未完成项\n\n开发中。', '''## 9. 未完成项
-
-- 用户使用原 Economist PDF 重新测试。
-- 根据失败提示中的可读页/OCR失败页数量继续定位具体模型或出版物版式问题。
-- 验收通过前不合并到 `main`。''')
-          log.write_text(text, encoding='utf-8')
-          PY
-          rm -f .github/workflows/fix_reader_header_pdf_once.yml
-
-      - name: Commit fix
+      - name: Commit repair
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html TASK_LOGS/2026-07-27-0435-header-width-pdf-fallback.md .github/workflows
+          git add -A
           git commit -m "fix: align header and harden PDF extraction"
           git push origin HEAD:feat/reader-annotations-v2
