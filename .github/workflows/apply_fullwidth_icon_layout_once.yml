@@ -22,6 +22,14 @@ jobs:
       - name: Apply, validate and capture diagnostics
         shell: bash
         run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/one_shot_fullwidth_icon_layout.py')
+          source = path.read_text(encoding='utf-8')
+          source = source.replace('split(/\\n+/)', 'split(/\\\\n+/)')
+          path.write_text(source, encoding='utf-8')
+          PY
+
           set +e
           python scripts/one_shot_fullwidth_icon_layout.py > /tmp/patch.log 2>&1
           patch_code=$?
