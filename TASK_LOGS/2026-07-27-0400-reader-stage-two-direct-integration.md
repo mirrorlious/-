@@ -39,6 +39,7 @@
 - 先前失败发生在 GitHub Actions 的 `Execute embedded stage-two patch`，原因是补丁依赖旧源码的精确字符串锚点；用户上传、SSH、分支和写权限均正常。
 - 分支 `feat/reader-polish-book-import` 中已有完整、可审阅的第二阶段实现，且 `index.html` 同时保留批注功能；本次采用整文件候选验证后整合，而非再次执行脆弱锚点替换。
 - 长文档结果应存 IndexedDB，不写入 localStorage；现有候选实现使用 `book-imports`、`book-articles` 和 `pdf-tasks`。
+- 一次性整合工作流已登记；本提交用于在工作流存在后触发执行。
 
 ## 6. 涉及文件
 
