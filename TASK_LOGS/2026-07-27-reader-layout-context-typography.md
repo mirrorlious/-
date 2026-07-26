@@ -80,3 +80,12 @@ GitHub：未上传，等待用户本地验收。
 - `git diff --check` passed.
 - Known limitation: the stage-2 control labels are temporary English labels; draggable divider, selection toolbar, and request deduplication remain for later stages.
 - Next: complete standard/split/focus behavior in stage 3, then refine immersive/fullscreen behavior.
+
+## 9. Stage 3: Standard, split, and focus modes
+
+- Status: completed locally.
+- Standard mode keeps the reading page single-column and hides the side panel.
+- Split mode expands the page width and shows the learning panel when enabled.
+- Focus mode uses a narrower centered reading column and hides the learning panel.
+- Validation: browser interaction switched focus -> split; focus had no side panel, split restored the side panel and layout controls.
+- Next: refine immersive mode and browser fullscreen behavior in stage 4.

@@ -95,6 +95,11 @@
             min-width: 0;
         }
 
+        .reader-workspace-focus .reader-main-column {
+            max-width: 920px;
+            margin-inline: auto;
+        }
+
         .reader-side-panel {
             position: sticky;
             top: 80px;
@@ -2560,7 +2565,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                     </div>
                                 </div>
                             ) : (
-                                <div className={`reader-workspace ${layoutMode === 'split' && rightPanelOpen ? 'reader-workspace-split' : ''}`} style={layoutMode === 'split' && rightPanelOpen ? { gridTemplateColumns: `minmax(0, ${splitRatio}fr) minmax(380px, ${100 - splitRatio}fr)` } : undefined}>
+                                <div className={`reader-workspace ${layoutMode === 'focus' ? 'reader-workspace-focus' : ''} ${layoutMode === 'split' && rightPanelOpen ? 'reader-workspace-split' : ''}`} style={layoutMode === 'split' && rightPanelOpen ? { gridTemplateColumns: `minmax(0, ${splitRatio}fr) minmax(380px, ${100 - splitRatio}fr)` } : undefined}>
                                 <article className="reader-main-column py-8 animate-fade-in relative transition-all" style={{ paddingLeft: `${typographyConfig.paddingX}%`, paddingRight: `${typographyConfig.paddingX}%` }}>
                                     <div className="sticky top-16 z-30 -mx-2 sm:mx-0 mb-8 px-2 sm:px-0 py-3 bg-white/95 dark:bg-gray-900/95 backdrop-blur flex flex-col sm:flex-row sm:justify-center sm:items-center gap-2 sm:gap-3">
                                         <div className="w-full sm:w-auto bg-gray-100 dark:bg-gray-800 p-1 rounded-sm flex gap-1 border border-gray-200 dark:border-gray-700">
