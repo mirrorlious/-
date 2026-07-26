@@ -21,11 +21,15 @@ jobs:
         run: |
           git clone --quiet --single-branch --branch feat/reader-polish-book-import "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
 
-      - name: Decode and apply patch
+      - name: Apply patch when needed
         id: patch
         continue-on-error: true
         shell: bash
         run: |
+          if grep -q 'ANNOTATION_COLOR_MAP' index.html; then
+            echo 'Reader patch is already present; skipping the one-time patch.'
+            exit 0
+          fi
           git show 13e05e1eb69df0a5948508c7f24968c78e934a99:scripts/apply_reader_improvements.py.gz.b64 | base64 -d | gzip -d > /tmp/apply_reader_improvements.py
           python - <<'PY'
           from pathlib import Path
@@ -69,10 +73,27 @@ jobs:
           cat /tmp/reader-patch.log || true
           exit 1
 
-      - name: Validate page
+      - name: Repair generated escape sequences
         run: |
           python - <<'PY'
           from pathlib import Path
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          broken = 'const totalText = extractedPages.map(page => page.text).join("\n\n").trim();'
+          fixed = 'const totalText = extractedPages.map(page => page.text).join("\\n\\n").trim();'
+          if broken in text:
+              text = text.replace(broken, fixed, 1)
+              path.write_text(text, encoding='utf-8')
+              print('Repaired PDF page join escape sequence')
+          else:
+              print('No generated escape repair needed')
+          PY
+
+      - name: Validate markers and Babel JSX
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
           text = Path('index.html').read_text(encoding='utf-8')
           required = ['ANNOTATION_COLOR_MAP', '书籍识别结果', 'saveSelectedBookArticles', '编辑内容', 'book-imports', 'reader-theme-root']
           missing = [item for item in required if item not in text]
@@ -80,8 +101,13 @@ jobs:
               raise SystemExit(f'Missing required markers: {missing}')
           if text.count('<html') != 1 or text.count('</html>') != 1:
               raise SystemExit('HTML shell is malformed')
-          print('Validation markers present')
+          match = re.search(r'<script type="text/babel"[^>]*>([\s\S]*?)</script>', text)
+          if not match:
+              raise SystemExit('Babel application script not found')
+          Path('/tmp/reader-app.jsx').write_text(match.group(1), encoding='utf-8')
+          print('Validation markers present; JSX extracted')
           PY
+          npx --yes --package=@babel/core --package=@babel/cli --package=@babel/preset-react babel /tmp/reader-app.jsx --presets=@babel/preset-react --out-file=/tmp/reader-app.js
           git diff --check
 
       - name: Commit feature changes
@@ -93,5 +119,5 @@ jobs:
           git config user.name 'reader-improvement-bot'
           git config user.email 'actions@users.noreply.github.com'
           git add index.html
-          git commit -m 'feat: polish annotations, editable tree and book import [skip ci]'
+          git commit -m 'fix: validate and repair reader improvements [skip ci]'
           git push origin HEAD:feat/reader-polish-book-import
