@@ -25,6 +25,7 @@ jobs:
           set +e
           python scripts/one_shot_portable_bundles_batch_analysis.py > /tmp/patch.log 2>&1
           patch_code=$?
+          sed -i 's/[[:space:]]\+$//' index.html TASK_LOGS/2026-07-27-2300-portable-article-bundles-batch-analysis.md
           git diff --check > /tmp/diff.log 2>&1
           diff_code=$?
           python - <<'PY' > /tmp/static.log 2>&1
