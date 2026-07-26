@@ -24,7 +24,7 @@ python -m http.server 5173
 
 然后访问 `http://localhost:5173`。
 
-首次使用 AI 功能前，点击右上角“API 设置”，填入自己的模型服务配置。
+首次使用 AI 功能前，打开左上角主菜单，进入“模型配置”填写自己的模型服务配置。
 
 ## 部署到 GitHub Pages
 
