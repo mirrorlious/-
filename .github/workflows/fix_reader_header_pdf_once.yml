@@ -21,6 +21,13 @@ jobs:
       - name: Apply repair and capture result
         shell: bash
         run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/one_shot_fix_header_pdf.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('"extractionMethod: \'text-raw\'"', '"extractionMethod = \'text-raw\'"')
+          path.write_text(text, encoding='utf-8')
+          PY
           set +e
           python scripts/one_shot_fix_header_pdf.py > /tmp/reader-repair.log 2>&1
           code=$?
