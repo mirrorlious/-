@@ -28,6 +28,7 @@ jobs:
           text = path.read_text(encoding='utf-8')
           text = text.replace('"kind: \'paragraph-translation\'"', '"openParagraphResult(\'paragraph-translation\'"')
           text = text.replace('"kind: \'paragraph-quiz\'"', '"openParagraphResult(\'paragraph-quiz\'"')
+          text = text.replace("text = text[:start] + '''            const fetchFullTranslation", "text = text[:start] + r'''            const fetchFullTranslation")
           path.write_text(text, encoding='utf-8')
           PY
 
