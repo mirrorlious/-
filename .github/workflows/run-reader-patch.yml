@@ -1,0 +1,49 @@
+name: Run reader patch on feature branch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/run-reader-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-feature-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/reader-polish-book-import
+          fetch-depth: 0
+
+      - name: Decode and apply patch
+        run: |
+          base64 -d scripts/apply_reader_improvements.py.gz.b64 | gzip -d > /tmp/apply_reader_improvements.py
+          python -m py_compile /tmp/apply_reader_improvements.py
+          python /tmp/apply_reader_improvements.py
+
+      - name: Validate page
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = ['ANNOTATION_COLOR_MAP', '书籍识别结果', 'saveSelectedBookArticles', '编辑内容', 'book-imports', 'reader-theme-root']
+          missing = [item for item in required if item not in text]
+          if missing:
+              raise SystemExit(f'Missing required markers: {missing}')
+          if text.count('<html') != 1 or text.count('</html>') != 1:
+              raise SystemExit('HTML shell is malformed')
+          print('Validation markers present')
+          PY
+          git diff --check
+
+      - name: Commit feature changes
+        run: |
+          git config user.name 'reader-improvement-bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m 'feat: polish annotations, editable tree and book import [skip ci]'
+          git push origin HEAD:feat/reader-polish-book-import
