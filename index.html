@@ -858,6 +858,51 @@ ${JSON.stringify(miniCorpus, null, 2)}
             return await callLLM(prompt, apiConfig, true);
         };
 
+        const normalizeQuizQuestions = (quizData) => {
+            if (!quizData) return [];
+            if (Array.isArray(quizData)) return quizData.filter(Boolean);
+            if (Array.isArray(quizData.questions)) return quizData.questions.filter(Boolean);
+            if (quizData.questionEn || quizData.options) return [quizData];
+            return [];
+        };
+
+        const callGeminiFullQuiz = async (text, apiConfig) => {
+            const prompt = `你是一名考研英语阅读命题专家。请根据以下完整文章生成恰好3道单项选择题。
+题目要求：
+1. 第1题考查全文主旨或作者观点。
+2. 第2题考查重要细节、推断或逻辑关系。
+3. 第3题考查语境词义、作者态度或写作目的。
+4. 每题必须有A-D四个英文选项，干扰项要符合考研命题方式。
+5. questionZh、选项中文和analysis用于用户提交答案后显示，不能在题干中泄露答案。
+6. 三题答案不应全部相同。
+
+文章：
+"${text}"
+
+只输出纯JSON，结构必须为：
+{
+  "questions": [
+    {
+      "id": "Q1",
+      "questionEn": "...",
+      "questionZh": "...",
+      "options": [
+        {"id": "A", "textEn": "...", "textZh": "..."},
+        {"id": "B", "textEn": "...", "textZh": "..."},
+        {"id": "C", "textEn": "...", "textZh": "..."},
+        {"id": "D", "textEn": "...", "textZh": "..."}
+      ],
+      "correctAnswerId": "A",
+      "analysis": "..."
+    }
+  ]
+}`;
+            const result = await callLLM(prompt, apiConfig, true);
+            const questions = normalizeQuizQuestions(result).slice(0, 3);
+            if (questions.length !== 3) throw new Error(`全文练习应返回3题，实际返回${questions.length}题`);
+            return { questions };
+        };
+
         const callGeminiSummary = async (fullText, apiConfig) => {
             const prompt = `提取外刊文章核心主旨，构建3层深度的中英双语逻辑树。直接输出JSON：
 {
@@ -1200,6 +1245,75 @@ ${JSON.stringify(miniCorpus, null, 2)}
             );
         };
 
+        const QuizSetPractice = ({ quizData }) => {
+            const questions = useMemo(() => normalizeQuizQuestions(quizData), [quizData]);
+            const [answers, setAnswers] = useState({});
+            const [submitted, setSubmitted] = useState(false);
+
+            useEffect(() => {
+                setAnswers({});
+                setSubmitted(false);
+            }, [quizData]);
+
+            if (!questions.length) return <p className="text-gray-400">暂无练习题。</p>;
+            const answeredCount = questions.filter((question, index) => answers[question.id || String(index)]).length;
+            const score = submitted ? questions.reduce((total, question, index) => total + (answers[question.id || String(index)] === question.correctAnswerId ? 1 : 0), 0) : 0;
+
+            const submitAnswers = () => {
+                if (answeredCount < questions.length) {
+                    window.showToast(`请先完成全部 ${questions.length} 道题`, 'warning');
+                    return;
+                }
+                setSubmitted(true);
+            };
+
+            return (
+                <div className="space-y-5" data-reader-full-quiz-practice="true">
+                    <div className="flex items-center justify-between gap-3 p-3 border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10">
+                        <div><div className="text-[12px] font-semibold text-violet-700 dark:text-violet-300">全文阅读练习 · {questions.length} 题</div><div className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">提交前不会显示正确答案和解析。</div></div>
+                        <div className="text-[11px] text-gray-500">{submitted ? `得分 ${score}/${questions.length}` : `已答 ${answeredCount}/${questions.length}`}</div>
+                    </div>
+                    {questions.map((question, index) => {
+                        const questionKey = question.id || String(index);
+                        const selected = answers[questionKey] || '';
+                        const isCorrect = selected === question.correctAnswerId;
+                        return (
+                            <section key={questionKey} className="p-4 border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/30 rounded-sm">
+                                <div className="flex items-start gap-2"><span className="mt-0.5 w-6 h-6 shrink-0 grid place-items-center bg-slate-100 dark:bg-gray-800 text-[11px] font-semibold">{index + 1}</span><div className="min-w-0"><p className="font-serif font-semibold leading-relaxed text-gray-900 dark:text-gray-100">{question.questionEn}</p>{question.questionZh && <p className="mt-1 text-[11px] text-gray-400">{question.questionZh}</p>}</div></div>
+                                <div className="mt-4 space-y-2">
+                                    {(question.options || []).map(option => {
+                                        let optionClass = 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-violet-300 dark:hover:border-violet-600';
+                                        if (submitted) {
+                                            if (option.id === question.correctAnswerId) optionClass = 'border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-200';
+                                            else if (selected === option.id) optionClass = 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-300';
+                                            else optionClass = 'border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 text-gray-400';
+                                        } else if (selected === option.id) {
+                                            optionClass = 'border-violet-400 dark:border-violet-500 bg-violet-50 dark:bg-violet-900/20 text-violet-900 dark:text-violet-200';
+                                        }
+                                        return (
+                                            <button key={option.id} type="button" disabled={submitted} onClick={() => setAnswers(previous => ({ ...previous, [questionKey]: option.id }))} className={`w-full p-3 border rounded-sm text-left transition-colors ${optionClass}`}>
+                                                <span className="font-serif text-[13px] font-medium">{option.id}. {option.textEn}</span>
+                                                {submitted && option.textZh && <span className="block mt-1 text-[11px] opacity-80">{option.textZh}</span>}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {submitted && (
+                                    <div className={`mt-4 p-3 border-l-2 ${isCorrect ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-900/15' : 'border-red-400 bg-red-50/60 dark:bg-red-900/15'}`}>
+                                        <div className={`text-[12px] font-semibold ${isCorrect ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>{isCorrect ? '回答正确' : `回答错误 · 正确答案 ${question.correctAnswerId}`}</div>
+                                        {question.analysis && <p className="mt-2 text-[12px] leading-relaxed text-gray-700 dark:text-gray-300"><span className="font-semibold text-violet-700 dark:text-violet-300">解析：</span>{question.analysis}</p>}
+                                    </div>
+                                )}
+                            </section>
+                        );
+                    })}
+                    <div className="flex justify-end gap-2">
+                        {submitted ? <button type="button" onClick={() => { setAnswers({}); setSubmitted(false); }} className="min-h-[38px] px-4 border border-gray-200 dark:border-gray-700 rounded-sm text-[12px] hover:bg-gray-50 dark:hover:bg-gray-800">重新作答</button> : <button type="button" onClick={submitAnswers} className="min-h-[38px] px-5 bg-violet-600 text-white rounded-sm text-[12px] font-medium hover:bg-violet-500">提交答案</button>}
+                    </div>
+                </div>
+            );
+        };
+
         const SyntaxBreakdowns = ({ data }) => {
             if (!data || !data.hasComplexSentence || !data.complexSentences || data.complexSentences.length === 0) return null;
             const typeColorMap = { "主干": "bg-amber-100/70 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 border-amber-200 dark:border-amber-800", "非谓语动词": "bg-blue-100/70 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 border-blue-200 dark:border-blue-800", "介词短语": "bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800", "从句": "bg-rose-100/70 dark:bg-rose-900/30 text-rose-900 dark:text-rose-200 border-rose-200 dark:border-rose-800", "其他": "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600" };
@@ -1311,7 +1425,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
             return pieces;
         };
 
-        const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId, activeDicts, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig, savedResults = null, onPersistParagraphResult, onOpenAnalysis, onRequestAnnotation, onFocusAnnotation }) => {
+        const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId, activeDicts, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig, savedResults = null, inlineResultsEnabled = true, onPersistParagraphResult, onOpenAnalysis, onRequestAnnotation, onFocusAnnotation }) => {
             const [showTranslation, setShowTranslation] = useState(false);
             const [localTranslation, setLocalTranslation] = useState(savedResults?.translation || "");
             const [isLocalTransLoading, setIsLocalTransLoading] = useState(false);
@@ -1903,10 +2017,10 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                     {audioUrl && <div className="mt-3 animate-fade-in-down w-full max-w-sm"><audio src={audioUrl} controls className="h-9 w-full rounded-full" autoPlay /></div>}
 
-                    {showTranslation && finalTranslationToShow && <div className="mt-4 text-gray-800 dark:text-gray-300 animate-fade-in-down whitespace-pre-wrap border-l-[3px] border-gray-300 dark:border-gray-600 pl-4 py-1 bg-gray-50/50 dark:bg-gray-800/50 rounded-r-lg" style={{ fontFamily: typographyConfig.chineseFontFamily || '"Noto Serif SC", STSong, serif', fontSize: `${Math.max(14, typographyConfig.fontSize - 2)}px`, lineHeight: typographyConfig.lineHeight }}>{finalTranslationToShow}</div>}
+                    {inlineResultsEnabled && showTranslation && finalTranslationToShow && <div className="mt-4 text-gray-800 dark:text-gray-300 animate-fade-in-down whitespace-pre-wrap border-l-[3px] border-gray-300 dark:border-gray-600 pl-4 py-1 bg-gray-50/50 dark:bg-gray-800/50 rounded-r-lg" style={{ fontFamily: typographyConfig.chineseFontFamily || '"Noto Serif SC", STSong, serif', fontSize: `${Math.max(14, typographyConfig.fontSize - 2)}px`, lineHeight: typographyConfig.lineHeight }}>{finalTranslationToShow}</div>}
 
-                    {showAnalysis && analysisData && <SyntaxBreakdowns data={analysisData} />}
-                    {showQuiz && quizData && (
+                    {inlineResultsEnabled && showAnalysis && analysisData && <SyntaxBreakdowns data={analysisData} />}
+                    {inlineResultsEnabled && showQuiz && quizData && (
                         <div className="mt-4 p-5 bg-purple-50/60 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-900/50 rounded-2xl animate-fade-in-down shadow-sm">
                              <div className="flex items-center space-x-2 mb-4"><span className="bg-purple-600 text-white text-[11px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Reading Comprehension</span></div>
                              <p className="text-[15px] font-serif font-bold text-gray-900 dark:text-gray-100 mb-1">{quizData.questionEn}</p>
@@ -2577,17 +2691,20 @@ ${JSON.stringify(miniCorpus, null, 2)}
             return blocks.join('\n\n');
         };
 
-        const quizToMarkdown = (quiz, heading = '练习题') => {
-            if (!quiz) return '';
-            const options = Array.isArray(quiz.options) ? quiz.options.map(option => `- ${option.id || ''}. ${option.textEn || ''}${option.textZh ? ` / ${option.textZh}` : ''}`).join('\n') : '';
-            return [
-                `### ${heading}`,
-                quiz.questionEn || '',
-                quiz.questionZh || '',
-                options,
-                quiz.correctAnswerId ? `**答案：${quiz.correctAnswerId}**` : '',
-                quiz.analysis ? `**解析：** ${quiz.analysis}` : ''
-            ].filter(Boolean).join('\n\n');
+        const quizToMarkdown = (quizData, heading = '练习题') => {
+            const questions = normalizeQuizQuestions(quizData);
+            if (!questions.length) return '';
+            return questions.map((quiz, index) => {
+                const options = Array.isArray(quiz.options) ? quiz.options.map(option => `- ${option.id || ''}. ${option.textEn || ''}${option.textZh ? ` / ${option.textZh}` : ''}`).join('\n') : '';
+                return [
+                    `### ${heading}${questions.length > 1 ? ` ${index + 1}` : ''}`,
+                    quiz.questionEn || '',
+                    quiz.questionZh || '',
+                    options,
+                    quiz.correctAnswerId ? `**答案：${quiz.correctAnswerId}**` : '',
+                    quiz.analysis ? `**解析：** ${quiz.analysis}` : ''
+                ].filter(Boolean).join('\n\n');
+            }).join('\n\n');
         };
 
         const paragraphResultsToMarkdown = (paragraphResults = {}) => Object.entries(paragraphResults)
@@ -3517,7 +3634,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                     else bundle.results.fullMapData = await callGeminiSummary(getModelSafeText(sourceText, 30000, '批量结构树'), apiConfig);
                                 } else if (module === 'quiz') {
                                     if (bundle.results.fullQuizData) job.skippedModules += 1;
-                                    else bundle.results.fullQuizData = await callGeminiQuiz(getModelSafeText(sourceText, 10000, '批量全文练习'), apiConfig);
+                                    else bundle.results.fullQuizData = await callGeminiFullQuiz(getModelSafeText(sourceText, 18000, '批量全文练习'), apiConfig);
                                 }
                                 bundle.article.updatedAt = Date.now();
                                 bundle.metadata = { ...(bundle.metadata || {}), updatedAt: Date.now(), model: apiConfig.model || '' };
@@ -4249,7 +4366,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 setIsFullQuizLoading(true);
                 setRightPanelAnalysis({ kind: 'loading', title: '全文练习', message: '正在生成全文练习…' });
                 try {
-                    const data = await callGeminiQuiz(getModelSafeText(inputText || defaultText, 10000, '全文练习'), apiConfig);
+                    const data = await callGeminiFullQuiz(getModelSafeText(inputText || defaultText, 18000, '全文练习'), apiConfig);
                     setFullQuizData(data);
                     setRightPanelAnalysis({ kind: 'document-quiz', title: '全文练习', data, createdAt: Date.now() });
                     return data;
@@ -4293,20 +4410,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 if (result.kind === 'paragraph-translation') {
                     content = <div className="whitespace-pre-wrap leading-[1.8] text-[14px]">{result.data?.translation || '暂无翻译结果'}</div>;
                 } else if (result.kind === 'paragraph-analysis') {
-                    const sentences = result.data?.complexSentences || [];
-                    content = sentences.length ? (
-                        <div className="space-y-4">
-                            {sentences.map((item, index) => (
-                                <div key={index} className="pb-4 border-b border-gray-200 dark:border-gray-700 last:border-0">
-                                    <div className="text-[11px] font-medium text-amber-700 dark:text-amber-400">核心难句 {index + 1}</div>
-                                    <p className="mt-2 font-serif font-medium leading-relaxed text-gray-900 dark:text-gray-100">{item.originalSentence}</p>
-                                    <p className="mt-2 leading-relaxed text-gray-500 dark:text-gray-400">{item.sentenceTranslation}</p>
-                                    {item.chunks?.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{item.chunks.map((chunk, chunkIndex) => <span key={chunkIndex} className="px-2 py-1 rounded-sm bg-gray-100 dark:bg-gray-800 text-[11px]">{chunk.type} · {chunk.text}</span>)}</div>}
-                                    {item.writingTip && <p className="mt-3 p-2.5 bg-amber-50 dark:bg-amber-900/15 border-l-2 border-amber-400 text-[12px] leading-relaxed">{item.writingTip}</p>}
-                                </div>
-                            ))}
-                        </div>
-                    ) : <p className="text-gray-400">当前段落未识别到复杂句。</p>;
+                    content = result.data?.complexSentences?.length ? <SyntaxBreakdowns data={result.data} /> : <p className="text-gray-400">当前段落未识别到复杂句。</p>;
                 } else if (result.kind === 'paragraph-quiz') {
                     const quiz = result.data || {};
                     content = (
@@ -4329,14 +4433,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         </div>
                     );
                 } else if (result.kind === 'document-quiz') {
-                    const quiz = result.data || {};
-                    content = (
-                        <div className="space-y-3">
-                            <div><p className="font-serif font-semibold leading-relaxed text-gray-900 dark:text-gray-100">{quiz.questionEn}</p><p className="mt-1 text-gray-500 dark:text-gray-400">{quiz.questionZh}</p></div>
-                            <div className="space-y-2">{(quiz.options || []).map(option => <div key={option.id} className={`p-2.5 border rounded-sm ${option.id === quiz.correctAnswerId ? 'border-emerald-300 bg-emerald-50/60 dark:bg-emerald-900/15' : 'border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-gray-900/30'}`}><span className="font-medium">{option.id}. {option.textEn}</span>{option.textZh && <div className="mt-1 text-[11px] text-gray-500">{option.textZh}</div>}</div>)}</div>
-                            {quiz.analysis && <div className="p-3 bg-violet-50 dark:bg-violet-900/15 border-l-2 border-violet-400 leading-relaxed"><span className="font-semibold">解析：</span>{quiz.analysis}</div>}
-                        </div>
-                    );
+                    content = <QuizSetPractice quizData={result.data} />;
                 }
 
                 return (
@@ -4904,8 +5001,14 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 apiConfig={apiConfig}
                                                 typographyConfig={typographyConfig}
                                                 savedResults={paragraphResults[String(idx)] || null}
+                                                inlineResultsEnabled={!(layoutMode === 'split' && rightPanelOpen)}
                                                 onPersistParagraphResult={handlePersistParagraphResult}
-                                                onOpenAnalysis={(result) => { setRightPanelAnalysis(result); setRightPanelTab('analysis'); setLayoutMode('split'); setRightPanelOpen(true); }}
+                                                onOpenAnalysis={(result) => {
+                                                    if (layoutMode === 'split' && rightPanelOpen) {
+                                                        setRightPanelAnalysis(result);
+                                                        setRightPanelTab('analysis');
+                                                    }
+                                                }}
                                             />
                                         ))}
                                     </div>
