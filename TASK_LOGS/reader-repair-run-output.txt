@@ -1,3 +1,0 @@
-exit_code=0
-commit=239726617f9c863e0acbea535ebadb8da02b1708
----- output ----
