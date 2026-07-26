@@ -22,6 +22,14 @@ jobs:
       - name: Apply patch and capture output
         shell: bash
         run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/one_shot_results_fulltext_tools.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('"kind: \'paragraph-translation\'"', '"openParagraphResult(\'paragraph-translation\'"')
+          text = text.replace('"kind: \'paragraph-quiz\'"', '"openParagraphResult(\'paragraph-quiz\'"')
+          path.write_text(text, encoding='utf-8')
+          PY
           set +e
           python scripts/one_shot_results_fulltext_tools.py > /tmp/results-tools.log 2>&1
           code=$?
@@ -47,8 +55,8 @@ jobs:
           required = [
               'data-reader-fulltext-trigger="true"',
               'data-reader-fulltext-menu="true"',
-              "kind: 'paragraph-translation'",
-              "kind: 'paragraph-quiz'",
+              "openParagraphResult('paragraph-translation'",
+              "openParagraphResult('paragraph-quiz'",
               "kind: 'document-translation'",
               "kind: 'document-logic'",
               'renderRightPanelAnalysis()',
