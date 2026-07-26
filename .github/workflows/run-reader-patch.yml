@@ -26,7 +26,39 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          base64 -d scripts/apply_reader_improvements.py.gz.b64 | gzip -d > /tmp/apply_reader_improvements.py
+          git show 13e05e1eb69df0a5948508c7f24968c78e934a99:scripts/apply_reader_improvements.py.gz.b64 | base64 -d | gzip -d > /tmp/apply_reader_improvements.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/apply_reader_improvements.py')
+          source = path.read_text(encoding='utf-8')
+          helper_anchor = """def regex_once(pattern, repl, label, flags=re.S):
+              global text
+              text2, count = re.subn(pattern, repl, text, count=1, flags=flags)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected 1 regex match, got {count}')
+              text = text2
+          """
+          helper_replacement = helper_anchor + """
+
+          def replace_last(old, new, label):
+              global text
+              count = text.count(old)
+              if count < 1:
+                  raise RuntimeError(f'{label}: expected at least 1 exact match, got {count}')
+              head, separator, tail = text.rpartition(old)
+              text = head + new + tail
+          """
+          if helper_anchor not in source:
+              raise SystemExit('helper anchor missing')
+          source = source.replace(helper_anchor, helper_replacement, 1)
+          fullscreen_anchor = """replace_once(
+              '                                            <LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode={mapMode} collapsedNodes={collapsedMapNodes} onToggle={toggleMapNode} />',
+          """
+          if fullscreen_anchor not in source:
+              raise SystemExit('fullscreen anchor missing')
+          source = source.replace(fullscreen_anchor, fullscreen_anchor.replace('replace_once(', 'replace_last(', 1), 1)
+          path.write_text(source, encoding='utf-8')
+          PY
           python -m py_compile /tmp/apply_reader_improvements.py
           python /tmp/apply_reader_improvements.py > /tmp/reader-patch.log 2>&1
 
