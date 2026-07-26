@@ -25,25 +25,20 @@ jobs:
           from pathlib import Path
           path = Path('index.html')
           text = path.read_text(encoding='utf-8')
-          marker = """        .reader-theme-root:not(.dark) .border-gray-900,
-          .reader-theme-root:not(.dark) .border-black {
-              border-color: #91a9bb !important;
-          }
-          """
-          addition = marker + """
-
-          .reader-theme-root:not(.dark) .bg-gray-800 {
+          insertion_point = '        .reader-theme-root:not(.dark) .bg-slate-900 {'
+          addition = '''        .reader-theme-root:not(.dark) .bg-gray-800 {
               background-color: #527895 !important;
           }
 
           .reader-theme-root:not(.dark) .border-gray-800 {
               border-color: #91a9bb !important;
           }
-          """
+
+          '''
           if '.reader-theme-root:not(.dark) .bg-gray-800 {' not in text:
-              if marker not in text:
-                  raise SystemExit('Light theme marker not found')
-              text = text.replace(marker, addition, 1)
+              if insertion_point not in text:
+                  raise SystemExit('Light theme insertion point not found')
+              text = text.replace(insertion_point, addition + insertion_point, 1)
               path.write_text(text, encoding='utf-8')
               print('Softened remaining charcoal controls')
           else:
