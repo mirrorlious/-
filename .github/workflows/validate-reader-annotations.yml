@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feat/reader-annotations-v2
+          fetch-depth: 0
 
       - name: Extract Babel application source
         run: |
