@@ -19,12 +19,24 @@ jobs:
         with:
           ref: feat/reader-polish-book-import
           fetch-depth: 0
+          show-progress: false
 
       - name: Decode and apply patch
+        id: patch
+        continue-on-error: true
+        shell: bash
         run: |
+          set -o pipefail
           base64 -d scripts/apply_reader_improvements.py.gz.b64 | gzip -d > /tmp/apply_reader_improvements.py
           python -m py_compile /tmp/apply_reader_improvements.py
-          python /tmp/apply_reader_improvements.py
+          python /tmp/apply_reader_improvements.py > /tmp/reader-patch.log 2>&1
+
+      - name: Show concise patch failure
+        if: steps.patch.outcome == 'failure'
+        run: |
+          echo '--- reader patch failure ---'
+          cat /tmp/reader-patch.log || true
+          exit 1
 
       - name: Validate page
         run: |
