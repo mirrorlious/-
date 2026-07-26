@@ -1201,6 +1201,17 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 }
             };
 
+            const openParagraphResult = (kind, title, data) => {
+                onOpenAnalysis?.({
+                    kind,
+                    title,
+                    paragraphIndex,
+                    sourceText: text,
+                    data,
+                    createdAt: Date.now()
+                });
+            };
+
             const phraseRegex = useMemo(() => {
                 const customPhrases = activeDicts
                     .flatMap(d => Object.keys(d.data || {}))
@@ -1211,33 +1222,43 @@ ${JSON.stringify(miniCorpus, null, 2)}
             }, [activeDicts]);
 
             const handleToggleTrans = async (e) => {
-                e.stopPropagation(); 
+                e.stopPropagation();
                 if (showTranslation) { setShowTranslation(false); return; }
-                if (translationText || localTranslation) { setShowTranslation(true); return; } 
-                
-                setIsLocalTransLoading(true); 
+                const existingTranslation = translationText || localTranslation;
+                if (existingTranslation) {
+                    setShowTranslation(true);
+                    openParagraphResult('paragraph-translation', `第 ${paragraphIndex + 1} 段 · 段落翻译`, { translation: existingTranslation });
+                    return;
+                }
+
+                setIsLocalTransLoading(true);
                 try {
                     const trans = await callGeminiTranslation(getModelSafeText(text, 12000, "段落精翻"), apiConfig);
                     setLocalTranslation(trans);
                     setShowTranslation(true);
+                    openParagraphResult('paragraph-translation', `第 ${paragraphIndex + 1} 段 · 段落翻译`, { translation: trans });
                 } catch (e) {
                     window.showToast(`翻译异常: ${e.message}`, "error");
                 } finally {
-                    setIsLocalTransLoading(false); 
+                    setIsLocalTransLoading(false);
                 }
             };
 
             const handleToggleAnalysis = async (e) => {
                 e.stopPropagation();
                 if (showAnalysis) { setShowAnalysis(false); return; }
-                if (analysisData) { setShowAnalysis(true); return; }
+                if (analysisData) {
+                    setShowAnalysis(true);
+                    openParagraphResult('paragraph-analysis', `第 ${paragraphIndex + 1} 段 · 长难句拆解`, analysisData);
+                    return;
+                }
 
-                setIsAnalysisLoading(true); 
+                setIsAnalysisLoading(true);
                 try {
                     const data = await callGeminiIntensiveAnalysis(getModelSafeText(text, 10000, "长难句解构"), apiConfig);
                     setAnalysisData(data);
                     setShowAnalysis(true);
-                    onOpenAnalysis?.(data);
+                    openParagraphResult('paragraph-analysis', `第 ${paragraphIndex + 1} 段 · 长难句拆解`, data);
                 } catch (e) {
                     window.showToast(`句法解构异常: ${e.message}`, "error");
                 } finally {
@@ -1321,13 +1342,18 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const handleToggleQuiz = async (e) => {
                 e.stopPropagation();
                 if (showQuiz) { setShowQuiz(false); return; }
-                if (quizData) { setShowQuiz(true); return; }
+                if (quizData) {
+                    setShowQuiz(true);
+                    openParagraphResult('paragraph-quiz', `第 ${paragraphIndex + 1} 段 · 段落练习`, quizData);
+                    return;
+                }
 
-                setIsQuizLoading(true); 
+                setIsQuizLoading(true);
                 try {
                     const data = await callGeminiQuiz(getModelSafeText(text, 8000, "出题测试"), apiConfig);
-                    setQuizData(data); 
+                    setQuizData(data);
                     setShowQuiz(true);
+                    openParagraphResult('paragraph-quiz', `第 ${paragraphIndex + 1} 段 · 段落练习`, data);
                 } catch (e) {
                     window.showToast(`出题系统异常: ${e.message}`, "error");
                 } finally {
@@ -2230,6 +2256,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [rightPanelOpen, setRightPanelOpen] = useState(savedLayoutState.rightPanelOpen !== false);
             const [splitRatio, setSplitRatio] = useState(Number.isFinite(savedLayoutState.splitRatio) ? Math.min(70, Math.max(52, savedLayoutState.splitRatio)) : 58);
             const [rightPanelAnalysis, setRightPanelAnalysis] = useState(null);
+            const [isFullTextMenuOpen, setIsFullTextMenuOpen] = useState(false);
+            const fullTextMenuRef = useRef(null);
             const restoredReadingNotes = localState.readingNotes && typeof localState.readingNotes === 'object'
                 ? localState.readingNotes
                 : { version: 1, articles: {} };
@@ -2253,6 +2281,22 @@ ${JSON.stringify(miniCorpus, null, 2)}
             useEffect(() => {
                 persistLocalState({ layoutState: { layoutMode, rightPanelTab, rightPanelOpen, splitRatio } });
             }, [layoutMode, rightPanelTab, rightPanelOpen, splitRatio]);
+
+            useEffect(() => {
+                if (!isFullTextMenuOpen) return undefined;
+                const closeOnPointerDown = (event) => {
+                    if (!fullTextMenuRef.current?.contains(event.target)) setIsFullTextMenuOpen(false);
+                };
+                const closeOnEscape = (event) => {
+                    if (event.key === 'Escape') setIsFullTextMenuOpen(false);
+                };
+                document.addEventListener('pointerdown', closeOnPointerDown);
+                document.addEventListener('keydown', closeOnEscape);
+                return () => {
+                    document.removeEventListener('pointerdown', closeOnPointerDown);
+                    document.removeEventListener('keydown', closeOnEscape);
+                };
+            }, [isFullTextMenuOpen]);
 
             useEffect(() => {
                 const handleFullscreenChange = () => setIsBrowserFullscreen(Boolean(document.fullscreenElement));
@@ -2636,10 +2680,13 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 }
             };
 
-            const fetchFullTranslation = async (text, recordId) => {
+            const fetchFullTranslation = async (text, recordId, options = {}) => {
                 if (text.length > 120000) {
                     window.showToast("整本文本过长，已跳过一次性全文翻译；可按段展开精翻", "warning");
-                    return;
+                    if (options.openPanel) {
+                        setRightPanelAnalysis({ kind: 'error', title: '全文翻译', message: '正文超过 120,000 字符，请使用段落翻译。' });
+                    }
+                    return [];
                 }
                 setIsFullTransLoading(true);
                 try {
@@ -2650,17 +2697,25 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         translatedChunks.push(await callGeminiFullTranslation(chunks[i], apiConfig));
                     }
                     const res = translatedChunks.filter(Boolean).join('\n\n');
-                    if (res) {
-                        const transArray = res.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+                    const transArray = res ? res.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean) : [];
+                    if (transArray.length) {
                         setFullTranslations(transArray);
-                        if (recordId && history.length > 0) {
+                        if (recordId) {
                             const recordToUpdate = history.find(item => item.id === recordId) || { id: recordId, text };
                             saveHistoryToCloud({ ...recordToUpdate, fullTranslations: transArray });
                         }
+                        if (options.openPanel) {
+                            setRightPanelAnalysis({ kind: 'document-translation', title: '全文翻译', data: { translations: transArray }, createdAt: Date.now() });
+                        }
                     }
+                    return transArray;
                 } catch (e) {
                     window.showToast(`全局翻译被拦截，可点击段落独立精翻。\n(${e.message})`, "warning");
-                } finally { setIsFullTransLoading(false); }
+                    if (options.openPanel) setRightPanelAnalysis({ kind: 'error', title: '全文翻译', message: e.message });
+                    return [];
+                } finally {
+                    setIsFullTransLoading(false);
+                }
             };
 
             const loadHistoryRecord = async (record) => {
@@ -2677,6 +2732,9 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 setFullMapData(record.fullMapData);
                 setCollapsedMapNodes(new Set());
                 setFullTranslations(record.fullTranslations || []);
+                setRightPanelAnalysis(null);
+                setRightPanelTab('outline');
+                setIsFullTextMenuOpen(false);
                 setCurrentHistoryId(record.id);
                 setIsReadingMode(true);
                 setIsHistoryDrawerOpen(false);
@@ -2736,7 +2794,10 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 setCollapsedMapNodes(new Set());
                 setShowGlobalLogic(false);
                 setGlobalLogicData(null);
-                setFullTranslations([]); 
+                setFullTranslations([]);
+                setRightPanelAnalysis(null);
+                setRightPanelTab('outline');
+                setIsFullTextMenuOpen(false);
 
                 const newId = Date.now().toString();
                 setCurrentHistoryId(newId);
@@ -3153,7 +3214,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 setCollapsedMapNodes(new Set(getMindMapBranchPaths(fullMapData?.mindmap)));
             };
 
-            const handleGenerateSummary = async () => {
+            const handleGenerateSummary = async (options = {}) => {
                 setIsAnalyzingMap(true);
                 try {
                     const sourceText = getModelSafeText(inputText || defaultText, 30000, "全文思维导图");
@@ -3170,20 +3231,33 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         };
                         saveHistoryToCloud({ ...recordToUpdate, fullMapData: data });
                     }
+                    if (options.openPanel) {
+                        setRightPanelTab('outline');
+                        setLayoutMode('split');
+                        setRightPanelOpen(true);
+                    }
                     window.showToast(user && dbInstance ? "已自动保存导图至云端" : "已自动保存导图到本地", "success");
-                } catch (e) { window.showToast(`导图解析失败: ${e.message}`, "error"); } 
-                finally {
+                    return data;
+                } catch (e) {
+                    window.showToast(`导图解析失败: ${e.message}`, "error");
+                    return null;
+                } finally {
                     setIsAnalyzingMap(false);
-                    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
                 }
             };
 
-            const handleToggleGlobalLogic = async () => {
-                if (showGlobalLogic) { setShowGlobalLogic(false); return; }
-                if (globalLogicData) { 
-                    setShowGlobalLogic(true); 
-                    setTimeout(() => { document.getElementById('global-logic-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
-                    return; 
+            const handleToggleGlobalLogic = async (options = {}) => {
+                const shouldOpenPanel = Boolean(options.openPanel);
+                if (showGlobalLogic && !shouldOpenPanel) { setShowGlobalLogic(false); return; }
+                if (globalLogicData) {
+                    setShowGlobalLogic(true);
+                    if (shouldOpenPanel) {
+                        setRightPanelAnalysis({ kind: 'document-logic', title: '全文逻辑', data: globalLogicData, createdAt: Date.now() });
+                        setRightPanelTab('analysis');
+                        setLayoutMode('split');
+                        setRightPanelOpen(true);
+                    }
+                    return globalLogicData;
                 }
                 setIsGlobalLogicLoading(true);
                 try {
@@ -3191,9 +3265,132 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     const data = await callGeminiReadingAnalysis(sourceText, apiConfig);
                     setGlobalLogicData(data);
                     setShowGlobalLogic(true);
-                    setTimeout(() => { document.getElementById('global-logic-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 150);
-                } catch (e) { window.showToast(`全文逻辑剖析失败: ${e.message}`, "error"); } 
-                finally { setIsGlobalLogicLoading(false); }
+                    if (shouldOpenPanel) {
+                        setRightPanelAnalysis({ kind: 'document-logic', title: '全文逻辑', data, createdAt: Date.now() });
+                        setRightPanelTab('analysis');
+                        setLayoutMode('split');
+                        setRightPanelOpen(true);
+                    }
+                    return data;
+                } catch (e) {
+                    window.showToast(`全文逻辑剖析失败: ${e.message}`, "error");
+                    if (shouldOpenPanel) setRightPanelAnalysis({ kind: 'error', title: '全文逻辑', message: e.message });
+                    return null;
+                } finally {
+                    setIsGlobalLogicLoading(false);
+                }
+            };
+
+            const openRightPanelTab = (tab) => {
+                setRightPanelTab(tab);
+                setLayoutMode('split');
+                setRightPanelOpen(true);
+            };
+
+            const handleFullTranslationTool = async () => {
+                setIsFullTextMenuOpen(false);
+                openRightPanelTab('analysis');
+                if (fullTranslations.length) {
+                    setRightPanelAnalysis({ kind: 'document-translation', title: '全文翻译', data: { translations: fullTranslations }, createdAt: Date.now() });
+                    return;
+                }
+                setRightPanelAnalysis({ kind: 'loading', title: '全文翻译', message: '正在分段翻译全文…' });
+                await fetchFullTranslation(inputText || defaultText, currentHistoryId, { openPanel: true });
+            };
+
+            const handleFullLogicTool = async () => {
+                setIsFullTextMenuOpen(false);
+                openRightPanelTab('analysis');
+                if (!globalLogicData) setRightPanelAnalysis({ kind: 'loading', title: '全文逻辑', message: '正在分析全文结构与命题逻辑…' });
+                await handleToggleGlobalLogic({ openPanel: true });
+            };
+
+            const handleFullOutlineTool = async () => {
+                setIsFullTextMenuOpen(false);
+                openRightPanelTab('outline');
+                if (!fullMapData) await handleGenerateSummary({ openPanel: true });
+            };
+
+            const handleFullNotesTool = () => {
+                setIsFullTextMenuOpen(false);
+                setNotesView('annotations');
+                openRightPanelTab('notes');
+            };
+
+            const renderRightPanelAnalysis = () => {
+                const result = rightPanelAnalysis;
+                if (!result) {
+                    return (
+                        <div className="py-8 text-center">
+                            <p className="text-[13px] text-gray-400 dark:text-gray-500">段落翻译、长难句、练习和全文分析会集中显示在这里。</p>
+                            <div className="mt-4 grid grid-cols-2 gap-2">
+                                <button onClick={handleFullTranslationTool} className="min-h-[38px] rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] hover:bg-white dark:hover:bg-gray-800">全文翻译</button>
+                                <button onClick={handleFullLogicTool} className="min-h-[38px] rounded-sm border border-gray-200 dark:border-gray-700 text-[12px] hover:bg-white dark:hover:bg-gray-800">全文逻辑</button>
+                            </div>
+                        </div>
+                    );
+                }
+
+                if (result.kind === 'loading') {
+                    return <div className="py-10 text-center"><div className="mx-auto w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-3 text-gray-500">{result.message || '正在处理…'}</p></div>;
+                }
+                if (result.kind === 'error') {
+                    return <div className="p-3 border border-red-200 dark:border-red-900 bg-red-50/60 dark:bg-red-900/15 rounded-sm text-red-700 dark:text-red-300"><h3 className="font-semibold">{result.title || '处理失败'}</h3><p className="mt-2 leading-relaxed">{result.message}</p></div>;
+                }
+
+                let content = null;
+                if (result.kind === 'paragraph-translation') {
+                    content = <div className="whitespace-pre-wrap leading-[1.8] text-[14px]">{result.data?.translation || '暂无翻译结果'}</div>;
+                } else if (result.kind === 'paragraph-analysis') {
+                    const sentences = result.data?.complexSentences || [];
+                    content = sentences.length ? (
+                        <div className="space-y-4">
+                            {sentences.map((item, index) => (
+                                <div key={index} className="pb-4 border-b border-gray-200 dark:border-gray-700 last:border-0">
+                                    <div className="text-[11px] font-medium text-amber-700 dark:text-amber-400">核心难句 {index + 1}</div>
+                                    <p className="mt-2 font-serif font-medium leading-relaxed text-gray-900 dark:text-gray-100">{item.originalSentence}</p>
+                                    <p className="mt-2 leading-relaxed text-gray-500 dark:text-gray-400">{item.sentenceTranslation}</p>
+                                    {item.chunks?.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{item.chunks.map((chunk, chunkIndex) => <span key={chunkIndex} className="px-2 py-1 rounded-sm bg-gray-100 dark:bg-gray-800 text-[11px]">{chunk.type} · {chunk.text}</span>)}</div>}
+                                    {item.writingTip && <p className="mt-3 p-2.5 bg-amber-50 dark:bg-amber-900/15 border-l-2 border-amber-400 text-[12px] leading-relaxed">{item.writingTip}</p>}
+                                </div>
+                            ))}
+                        </div>
+                    ) : <p className="text-gray-400">当前段落未识别到复杂句。</p>;
+                } else if (result.kind === 'paragraph-quiz') {
+                    const quiz = result.data || {};
+                    content = (
+                        <div className="space-y-3">
+                            <div><p className="font-serif font-semibold leading-relaxed text-gray-900 dark:text-gray-100">{quiz.questionEn}</p><p className="mt-1 text-gray-500 dark:text-gray-400">{quiz.questionZh}</p></div>
+                            <div className="space-y-2">{(quiz.options || []).map(option => <div key={option.id} className={`p-2.5 border rounded-sm ${option.id === quiz.correctAnswerId ? 'border-emerald-300 bg-emerald-50/60 dark:bg-emerald-900/15' : 'border-gray-200 dark:border-gray-700 bg-white/60 dark:bg-gray-900/30'}`}><span className="font-medium">{option.id}. {option.textEn}</span>{option.textZh && <div className="mt-1 text-[11px] text-gray-500">{option.textZh}</div>}</div>)}</div>
+                            {quiz.analysis && <div className="p-3 bg-violet-50 dark:bg-violet-900/15 border-l-2 border-violet-400 leading-relaxed"><span className="font-semibold">解析：</span>{quiz.analysis}</div>}
+                        </div>
+                    );
+                } else if (result.kind === 'document-translation') {
+                    content = <div className="space-y-3">{(result.data?.translations || []).map((paragraph, index) => <p key={index} className="leading-[1.8] text-[14px]">{paragraph}</p>)}</div>;
+                } else if (result.kind === 'document-logic') {
+                    const logic = result.data || {};
+                    content = (
+                        <div className="space-y-4">
+                            {logic.coreMeaning && <div className="p-3 bg-teal-50 dark:bg-teal-900/15 border-l-2 border-teal-500"><div className="text-[11px] font-medium text-teal-700 dark:text-teal-300">核心主旨</div><p className="mt-1 leading-relaxed font-medium">{logic.coreMeaning}</p></div>}
+                            {logic.logicalStructure && <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">逻辑结构</h4><p className="mt-2 leading-relaxed text-gray-600 dark:text-gray-300">{logic.logicalStructure}</p></div>}
+                            {logic.referenceAnalysis?.length > 0 && <div><h4 className="font-semibold text-gray-900 dark:text-gray-100">指代与连贯</h4><ul className="mt-2 space-y-1.5 list-disc pl-5">{logic.referenceAnalysis.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
+                            {logic.trapIdentification && logic.trapIdentification !== '无' && <div className="p-3 bg-red-50 dark:bg-red-900/15 border-l-2 border-red-400"><div className="font-semibold text-red-700 dark:text-red-300">命题陷阱</div><p className="mt-1 leading-relaxed">{logic.trapIdentification}</p></div>}
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="space-y-4">
+                        <div className="pb-3 border-b border-gray-200 dark:border-gray-700">
+                            <div className="flex items-start justify-between gap-3">
+                                <div><h3 className="font-semibold text-gray-900 dark:text-gray-100">{result.title || '精读结果'}</h3><p className="mt-1 text-[11px] text-gray-400">{Number.isFinite(result.paragraphIndex) ? `第 ${result.paragraphIndex + 1} 段` : '全文'} · 当前结果</p></div>
+                                <button onClick={() => setRightPanelAnalysis(null)} className="w-7 h-7 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" aria-label="清空当前精读结果">×</button>
+                            </div>
+                            {result.sourceText && <blockquote className="mt-3 pl-3 border-l-2 border-sky-300 text-[11px] leading-relaxed text-gray-500 dark:text-gray-400 line-clamp-4">“{result.sourceText}”</blockquote>}
+                        </div>
+                        {content || <p className="text-gray-400">暂无可显示结果。</p>}
+                    </div>
+                );
             };
 
             const paragraphs = useMemo(() => inputText.split(/\n+/).filter(p => p.trim() !== ''), [inputText]);
@@ -3658,8 +3855,8 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                             <button onClick={() => setIsImmersive(previous => !previous)} className="min-h-[36px] px-3 rounded-[2px] text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700">{isImmersive ? '退出沉浸' : '沉浸'}</button>
                                         </div>
                                         
-                                        {readingMode === 'intensive' && (
-                                            <div className="w-full sm:w-auto flex items-center gap-2 animate-fade-in">
+                                        <div className="w-full sm:w-auto flex items-center justify-center gap-2 animate-fade-in">
+                                            {readingMode === 'intensive' && (
                                                 <select
                                                     value={highlightMode}
                                                     onChange={(e) => setHighlightMode(e.target.value)}
@@ -3670,12 +3867,33 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                     <option value="blue">基础词汇</option>
                                                     <option value="none">关闭高亮</option>
                                                 </select>
-                                                <button onClick={handleToggleGlobalLogic} disabled={isGlobalLogicLoading} className={`min-h-[40px] shrink-0 flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium border px-3 rounded-sm transition-all ${showGlobalLogic ? 'bg-teal-600 dark:bg-gray-100 text-white dark:text-gray-900 border-teal-600 dark:border-gray-100' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
-                                                    {isGlobalLogicLoading ? <svg className="animate-spin w-3.5 h-3.5 loader-spin text-teal-600 dark:text-teal-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> : <svg className={`w-3.5 h-3.5 ${showGlobalLogic ? 'text-teal-600 dark:text-teal-400' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg> }
-                                                    <span>{isGlobalLogicLoading ? "分析中..." : showGlobalLogic ? "收起逻辑" : "全文逻辑"}</span>
+                                            )}
+                                            <div ref={fullTextMenuRef} className="relative shrink-0">
+                                                <button
+                                                    type="button"
+                                                    data-reader-fulltext-trigger="true"
+                                                    onClick={() => setIsFullTextMenuOpen(previous => !previous)}
+                                                    aria-haspopup="menu"
+                                                    aria-expanded={isFullTextMenuOpen}
+                                                    className={`min-h-[40px] flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium border px-3 rounded-sm transition-colors ${isFullTextMenuOpen ? 'bg-sky-50 dark:bg-sky-900/20 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-700' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                                                >
+                                                    <span>全文工具</span>
+                                                    <svg className={`w-3.5 h-3.5 transition-transform ${isFullTextMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 9l6 6 6-6"></path></svg>
                                                 </button>
+                                                {isFullTextMenuOpen && (
+                                                    <div data-reader-fulltext-menu="true" role="menu" aria-label="全文工具" className="absolute top-full right-0 z-50 mt-2 w-64 overflow-hidden rounded-sm border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-xl animate-fade-in-down">
+                                                        <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-800 text-[11px] text-gray-400">全文级操作 · 结果进入右侧面板</div>
+                                                        <div className="p-1.5">
+                                                            <button role="menuitem" onClick={handleFullTranslationTool} disabled={isFullTransLoading} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><span>全文翻译</span><span className="text-[10px] text-gray-400">{isFullTransLoading ? '处理中' : fullTranslations.length ? '已有结果' : '调用模型'}</span></button>
+                                                            <button role="menuitem" onClick={handleFullLogicTool} disabled={isGlobalLogicLoading} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><span>全文逻辑</span><span className="text-[10px] text-gray-400">{isGlobalLogicLoading ? '分析中' : globalLogicData ? '已有结果' : '调用模型'}</span></button>
+                                                            <button role="menuitem" onClick={handleFullOutlineTool} disabled={isAnalyzingMap} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-50"><span>全文结构 / 思维导图</span><span className="text-[10px] text-gray-400">{isAnalyzingMap ? '生成中' : fullMapData ? '已有结果' : '调用模型'}</span></button>
+                                                            <div className="my-1 border-t border-gray-100 dark:border-gray-800"></div>
+                                                            <button role="menuitem" onClick={handleFullNotesTool} className="w-full min-h-[42px] px-3 flex items-center justify-between gap-3 rounded-sm text-left text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"><span>学习笔记</span><span className="text-[10px] text-gray-400">{currentAnnotations.length} 条批注</span></button>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
 
                                     <div className="space-y-4 border-b border-gray-100 dark:border-gray-800 pb-16 mb-12">
@@ -3695,7 +3913,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 isTransLoading={isFullTransLoading} 
                                                 apiConfig={apiConfig}
                                                 typographyConfig={typographyConfig}
-                                                onOpenAnalysis={(data) => { setRightPanelAnalysis(data); setRightPanelTab('analysis'); setLayoutMode('split'); setRightPanelOpen(true); }}
+                                                onOpenAnalysis={(result) => { setRightPanelAnalysis(result); setRightPanelTab('analysis'); setLayoutMode('split'); setRightPanelOpen(true); }}
                                             />
                                         ))}
                                     </div>
@@ -3755,15 +3973,15 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 {[
                                                     ['outline', '全文结构'],
                                                     ['analysis', '精读结果'],
-                                                    ['notes', `笔记${currentAnnotations.length ? ` ${currentAnnotations.length}` : ''}`]
+                                                    ['notes', `学习笔记${currentAnnotations.length ? ` ${currentAnnotations.length}` : ''}`]
                                                 ].map(([tab, label]) => (
                                                     <button key={tab} onClick={() => setRightPanelTab(tab)} aria-pressed={rightPanelTab === tab} className={`flex-1 min-h-[38px] px-2 rounded-sm text-[12px] font-medium ${rightPanelTab === tab ? 'bg-sky-700 text-white dark:bg-gray-100 dark:text-gray-900' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>{label}</button>
                                                 ))}
                                                 <button onClick={() => setRightPanelOpen(false)} aria-label="关闭侧栏" className="w-8 h-8 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">×</button>
                                             </div>
                                             <div className="p-4 text-[13px] text-gray-700 dark:text-gray-300">
-                                                {rightPanelTab === 'outline' && (fullMapData?.mindmap ? <LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode="bilingual" collapsedNodes={collapsedMapNodes} onToggle={toggleMapNode} /> : <p className="text-gray-400 dark:text-gray-500">生成全文思维导图后，结构会显示在这里。</p>)}
-                                                {rightPanelTab === 'analysis' && (rightPanelAnalysis ? <div className="space-y-3"><h3 className="font-semibold text-gray-900 dark:text-gray-100">段落精读</h3>{rightPanelAnalysis.complexSentences?.map((item, index) => <div key={index} className="border-b border-gray-200 dark:border-gray-700 pb-3"><p className="font-medium leading-relaxed">{item.originalSentence}</p><p className="mt-1 text-gray-500 dark:text-gray-400">{item.sentenceTranslation}</p></div>)}</div> : globalLogicData ? <div className="space-y-3"><h3 className="font-semibold text-gray-900 dark:text-gray-100">全文分析</h3><p className="leading-relaxed">{globalLogicData.coreMeaning}</p><p className="text-gray-500 dark:text-gray-400">{globalLogicData.logicalStructure}</p></div> : <p className="text-gray-400 dark:text-gray-500">运行段落解构或全文逻辑后，结果会显示在这里。</p>)}
+                                                {rightPanelTab === 'outline' && (fullMapData?.mindmap ? <div className="space-y-3"><div className="flex items-center justify-between"><span className="text-[11px] text-gray-400">全文结构 · 双语</span><button onClick={openMapEditorModal} className="min-h-[30px] px-2 text-[11px] border border-gray-200 dark:border-gray-700 rounded-sm hover:bg-white dark:hover:bg-gray-800">全屏编辑</button></div><LogicTreeNode node={fullMapData.mindmap} isRoot={true} displayMode="bilingual" collapsedNodes={collapsedMapNodes} onToggle={toggleMapNode} /></div> : isAnalyzingMap ? <div className="py-10 text-center"><div className="mx-auto w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin"></div><p className="mt-3 text-gray-500">正在生成全文结构…</p></div> : <div className="py-8 text-center"><p className="text-gray-400 dark:text-gray-500">尚未生成全文结构。</p><button onClick={handleFullOutlineTool} className="mt-4 min-h-[38px] px-4 rounded-sm border border-gray-200 dark:border-gray-700 hover:bg-white dark:hover:bg-gray-800">生成思维导图</button></div>)}
+                                                {rightPanelTab === 'analysis' && renderRightPanelAnalysis()}
                                                 {rightPanelTab === 'notes' && (
                                                     <div className="space-y-4">
                                                         <div className="flex p-1 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-sm">
