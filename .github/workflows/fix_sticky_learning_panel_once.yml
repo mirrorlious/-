@@ -1,0 +1,79 @@
+name: Fix sticky learning panel once
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+
+      - name: Apply repair
+        shell: bash
+        run: python scripts/one_shot_fix_sticky_learning_panel.py
+
+      - name: Validate source
+        shell: bash
+        run: |
+          git diff --check
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              'reader-page-shell',
+              'overflow-x: clip',
+              'position: -webkit-sticky',
+              'height: calc(100dvh - 80px)',
+              "${isReadingMode ? 'overflow-visible' : 'overflow-hidden'}",
+              'reader-side-scroll custom-scrollbar'
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit(f'Missing markers: {missing}')
+          if 'overflow-x-hidden transition-colors' in text:
+              raise SystemExit('Old sticky-blocking root overflow remains')
+          if text.count('<script') != text.count('</script>'):
+              raise SystemExit('Script tag count mismatch')
+          print('Static sticky repair markers passed')
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          marker = '<script type="text/babel" data-type="module">'
+          start = text.index(marker) + len(marker)
+          end = text.index('</script>', start)
+          Path('/tmp/reader.jsx').write_text(text[start:end], encoding='utf-8')
+          PY
+          npm init -y >/dev/null 2>&1
+          npm install --no-save @babel/core @babel/preset-react >/dev/null 2>&1
+          node - <<'NODE'
+          const fs = require('fs');
+          const babel = require('@babel/core');
+          const source = fs.readFileSync('/tmp/reader.jsx', 'utf8');
+          babel.transformSync(source, {
+            filename: 'index.jsx',
+            sourceType: 'module',
+            presets: [['@babel/preset-react', { runtime: 'classic' }]]
+          });
+          console.log('Babel JSX parse passed');
+          NODE
+
+      - name: Commit repair
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: keep learning panel sticky while reading"
+          git push origin HEAD:feat/reader-annotations-v2
