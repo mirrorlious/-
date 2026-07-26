@@ -1578,6 +1578,35 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 }
             };
 
+            const defaultLayoutMode = typeof window !== 'undefined' && window.innerWidth >= 1200 ? 'split' : 'standard';
+            const savedLayoutState = localState.layoutState || {};
+            const [layoutMode, setLayoutMode] = useState(['standard', 'split', 'focus'].includes(savedLayoutState.layoutMode) ? savedLayoutState.layoutMode : defaultLayoutMode);
+            const [rightPanelTab, setRightPanelTab] = useState(['outline', 'analysis', 'notes'].includes(savedLayoutState.rightPanelTab) ? savedLayoutState.rightPanelTab : 'outline');
+            const [rightPanelOpen, setRightPanelOpen] = useState(savedLayoutState.rightPanelOpen !== false);
+            const [splitRatio, setSplitRatio] = useState(Number.isFinite(savedLayoutState.splitRatio) ? Math.min(70, Math.max(52, savedLayoutState.splitRatio)) : 58);
+            const [isImmersive, setIsImmersive] = useState(false);
+            const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+
+            useEffect(() => {
+                persistLocalState({ layoutState: { layoutMode, rightPanelTab, rightPanelOpen, splitRatio } });
+            }, [layoutMode, rightPanelTab, rightPanelOpen, splitRatio]);
+
+            useEffect(() => {
+                const handleFullscreenChange = () => setIsBrowserFullscreen(Boolean(document.fullscreenElement));
+                document.addEventListener('fullscreenchange', handleFullscreenChange);
+                return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            }, []);
+
+            const toggleBrowserFullscreen = async () => {
+                try {
+                    if (document.fullscreenElement) await document.exitFullscreen();
+                    else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+                    else setIsImmersive(previous => !previous);
+                } catch (error) {
+                    setIsImmersive(previous => !previous);
+                }
+            };
+
             const savedTypographyConfig = localState.typographyConfig || {};
             const initialTypographyConfig = {
                 ...DEFAULT_TYPOGRAPHY_CONFIG,

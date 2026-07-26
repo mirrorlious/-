@@ -49,6 +49,16 @@
 - 测试：`git status`、`git branch --show-current`、源码检索审计；工作区在审计前干净。
 - 下一步：实现阶段1布局状态模型，并先验证状态持久化和旧排版设置迁移。
 
+## 6. 阶段1：布局状态模型
+
+- 状态：已完成
+- 完成：增加 `layoutMode`、`rightPanelTab`、`rightPanelOpen`、`splitRatio`、`isImmersive` 和 `isBrowserFullscreen` 状态。
+- 完成：布局偏好统一保存到 `localStorage` 的 `layoutState`，浏览器全屏临时状态不持久化。
+- 完成：桌面宽度达到 1200px 时默认分栏，小于 1200px 默认标准布局；用户已有偏好优先。
+- 完成：监听 `fullscreenchange`，并为不支持或调用失败的环境提供沉浸模式降级。
+- 测试：待阶段提交后运行本地页面加载和 Babel 编译检查。
+- 下一步：阶段2接入桌面左右分栏容器和右侧面板。
+
 ## 6. 风险与已知问题
 
 - 单文件 React 修改范围大，必须按阶段小步提交。
