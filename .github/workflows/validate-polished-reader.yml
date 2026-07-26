@@ -1,0 +1,43 @@
+name: Validate polished reader JSX
+
+on:
+  pull_request:
+    branches:
+      - feat/reader-annotations-v2
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  jsx:
+    if: github.head_ref == 'feat/reader-polish-book-import'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone feature branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: git clone --quiet --single-branch --branch feat/reader-polish-book-import "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" .
+
+      - name: Repair in-memory generated escape and extract JSX
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'const totalText = extractedPages.map(page => page.text).join("\n\n").trim();',
+              'const totalText = extractedPages.map(page => page.text).join("\\n\\n").trim();',
+              1,
+          )
+          match = re.search(r'<script type="text/babel"[^>]*>([\s\S]*?)</script>', text)
+          if not match:
+              raise SystemExit('Babel application script not found')
+          Path('/tmp/reader-app.jsx').write_text(match.group(1), encoding='utf-8')
+          PY
+
+      - name: Parse JSX with Babel
+        env:
+          npm_config_loglevel: silent
+        run: npx --yes --package=@babel/core --package=@babel/cli --package=@babel/preset-react babel /tmp/reader-app.jsx --presets=@babel/preset-react --out-file=/tmp/reader-app.js
