@@ -3,7 +3,7 @@ diff_code=0
 static_code=0
 npm_code=0
 babel_code=1
-commit=3eac50027d0991fc99a838520041dfc741401b77
+commit=5c517a1b6820af1877e14d775fa6edbb284ec824
 ---- patch ----
 /home/runner/work/-/-/scripts/one_shot_results_fulltext_tools.py:153: SyntaxWarning: invalid escape sequence '\s'
   text = text[:start] + '''            const fetchFullTranslation = async (text, recordId, options = {}) => {
