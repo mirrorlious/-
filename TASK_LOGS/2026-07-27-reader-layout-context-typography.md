@@ -105,3 +105,12 @@ GitHub：未上传，等待用户本地验收。
 - The menu remains local to each paragraph and preserves existing translation, analysis, speech, cloud TTS, and quiz handlers without duplicating requests.
 - Validation: browser opened the menu and outside interaction restored its collapsed class; no API request was triggered.
 - Next: add an article-only selection toolbar in stage 6.
+
+## 12. Stage 6: Article selection toolbar
+
+- Status: implemented locally; manual drag selection remains part of final acceptance.
+- Added `selectionchange`, mouseup, and keyup tracking scoped to each paragraph DOM node; selections outside the article paragraph do not create the toolbar.
+- Added copy, selected-text translation, local speech, and more actions. Translation receives only the selected text and stores its result locally in the paragraph.
+- Validation: stage-6 page loaded successfully with no visible Babel error text; code passed `git diff --check` before commit.
+- Known limitation: automated browser tooling in this environment does not expose text-selection helpers, so drag-selection positioning needs manual validation.
+- Next: connect right-panel analysis behavior in stage 7.

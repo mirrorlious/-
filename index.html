@@ -855,10 +855,35 @@ ${JSON.stringify(miniCorpus, null, 2)}
             
             const [activeNote, setActiveNote] = useState(null);
             const [isInteracting, setIsInteracting] = useState(false);
+            const [selectedText, setSelectedText] = useState("");
+            const [selectionTranslation, setSelectionTranslation] = useState("");
+            const [isSelectionTranslating, setIsSelectionTranslating] = useState(false);
+            const paragraphRef = useRef(null);
 
             const isConsideredParagraph = text.split(/\s+/).filter(Boolean).length >= 15 && /[.,:;]/.test(text);
             const isPanelOpen = showTranslation || showAnalysis || showQuiz || !!activeNote || isTransLoading || isLocalTransLoading || isAnalysisLoading || isAudioLoading || isQuizLoading || !!audioUrl;
             const showActions = isInteracting || isPanelOpen;
+
+            useEffect(() => {
+                const updateSelection = () => {
+                    const selection = window.getSelection();
+                    if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+                        setSelectedText("");
+                        return;
+                    }
+                    const anchorInside = paragraphRef.current?.contains(selection.anchorNode);
+                    const focusInside = paragraphRef.current?.contains(selection.focusNode);
+                    setSelectedText(anchorInside && focusInside ? selection.toString().trim() : "");
+                };
+                document.addEventListener('selectionchange', updateSelection);
+                document.addEventListener('mouseup', updateSelection);
+                document.addEventListener('keyup', updateSelection);
+                return () => {
+                    document.removeEventListener('selectionchange', updateSelection);
+                    document.removeEventListener('mouseup', updateSelection);
+                    document.removeEventListener('keyup', updateSelection);
+                };
+            }, []);
 
             useEffect(() => {
                 if (!showActions) return undefined;
@@ -949,6 +974,28 @@ ${JSON.stringify(miniCorpus, null, 2)}
                 utterance.lang = 'en-US';
                 utterance.rate = 0.95;
                 window.speechSynthesis.speak(utterance);
+            };
+
+            const handleSelectionSpeech = () => {
+                if (!selectedText || !window.speechSynthesis) return;
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(selectedText);
+                utterance.lang = 'en-US';
+                utterance.rate = 0.95;
+                window.speechSynthesis.speak(utterance);
+            };
+
+            const handleSelectionTranslation = async () => {
+                if (!selectedText || isSelectionTranslating) return;
+                setIsSelectionTranslating(true);
+                try {
+                    const result = await callGeminiTranslation(getModelSafeText(selectedText, 8000, "选区翻译"), apiConfig);
+                    setSelectionTranslation(result);
+                } catch (e) {
+                    window.showToast(`选区翻译异常: ${e.message}`, "error");
+                } finally {
+                    setIsSelectionTranslating(false);
+                }
             };
 
             const handleToggleQuiz = async (e) => {
@@ -1090,8 +1137,9 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const finalTranslationToShow = translationText || localTranslation;
 
             return (
-                <div 
-                    data-reader-paragraph="true"
+                    <div 
+                        ref={paragraphRef}
+                        data-reader-paragraph="true"
                     className="mb-14 relative group"
                     onMouseEnter={() => setIsInteracting(true)}
                     onMouseLeave={() => setIsInteracting(false)}
@@ -1103,6 +1151,18 @@ ${JSON.stringify(miniCorpus, null, 2)}
                     >
                         {textSegments.map((seg, i) => <Fragment key={i}>{renderProcessedText(seg.text, seg.isTarget)}</Fragment>)}
                     </div>
+
+                    {selectedText && (
+                        <div role="toolbar" aria-label="Text selection actions" className="absolute left-0 right-0 top-full z-30 mt-2 flex flex-wrap items-center gap-1.5 p-2 bg-gray-900 text-white rounded-sm shadow-lg animate-fade-in">
+                            <span className="px-2 text-[11px] text-gray-300 truncate max-w-[180px]" title={selectedText}>{selectedText}</span>
+                            <button onClick={() => navigator.clipboard?.writeText(selectedText)} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20">Copy</button>
+                            <button onClick={handleSelectionTranslation} disabled={isSelectionTranslating} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20 disabled:opacity-50">{isSelectionTranslating ? 'Translating…' : 'Translate'}</button>
+                            <button onClick={handleSelectionSpeech} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20">Speak</button>
+                            <button onClick={() => setIsInteracting(true)} className="min-h-[32px] px-2.5 text-[11px] rounded-sm bg-white/10 hover:bg-white/20">More</button>
+                        </div>
+                    )}
+
+                    {selectionTranslation && selectedText && <div className="mt-3 border-l-2 border-blue-400 pl-3 text-[13px] text-gray-700 dark:text-gray-300">{selectionTranslation}</div>}
 
                     {!showActions && (
                         <button
