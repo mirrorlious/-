@@ -18,6 +18,17 @@ jobs:
           ref: feat/reader-annotations-v2
           fetch-depth: 0
 
+      - name: Correct patch validation marker
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/one_shot_four_panel_improvements.py')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('"structureViewMode === \'tree\' ? \'mindmap\' : \'tree\'"', '"previous === \'tree\' ? \'mindmap\' : \'tree\'"')
+          path.write_text(text, encoding='utf-8')
+          PY
+
       - name: Apply patch and capture diagnostics
         shell: bash
         run: |
