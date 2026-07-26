@@ -1,0 +1,6 @@
+exit_code=1
+commit=9dac31b55c80fcb7862d30006f42f03f708a244a
+---- output ----
+/home/runner/work/-/-/scripts/one_shot_results_fulltext_tools.py:153: SyntaxWarning: invalid escape sequence '\s'
+  text = text[:start] + '''            const fetchFullTranslation = async (text, recordId, options = {}) => {
+Missing result/full-text markers: ["kind: 'paragraph-translation'", "kind: 'paragraph-quiz'"]
