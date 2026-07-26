@@ -40,4 +40,20 @@ jobs:
       - name: Parse JSX with Babel
         env:
           npm_config_loglevel: silent
-        run: npx --yes --package=@babel/core --package=@babel/cli --package=@babel/preset-react babel /tmp/reader-app.jsx --presets=@babel/preset-react --out-file=/tmp/reader-app.js
+        run: |
+          mkdir -p /tmp/babel-check
+          cd /tmp/babel-check
+          npm init -y >/dev/null 2>&1
+          npm install --silent @babel/core @babel/preset-react
+          NODE_PATH=/tmp/babel-check/node_modules node - <<'NODE'
+          const fs = require('fs');
+          const babel = require('@babel/core');
+          const presetReact = require('@babel/preset-react');
+          const source = fs.readFileSync('/tmp/reader-app.jsx', 'utf8');
+          babel.transformSync(source, {
+            filename: 'reader-app.jsx',
+            presets: [[presetReact, { runtime: 'classic' }]],
+            parserOpts: { sourceType: 'module', plugins: ['jsx'] }
+          });
+          console.log('Babel JSX parse passed');
+          NODE
