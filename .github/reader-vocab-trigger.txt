@@ -1,0 +1,1 @@
+Trigger the robust one-shot reader vocabulary classification workflow.
