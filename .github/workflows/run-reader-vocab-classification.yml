@@ -1,0 +1,93 @@
+name: Run reader vocabulary classification patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/run-reader-vocab-classification.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-reader:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Prepare patch and vocabulary packs
+        shell: bash
+        run: |
+          git fetch origin feat/reader-annotations-v2
+          git show 'origin/feat/reader-annotations-v2:.github/workflows/apply-reader-vocab-classification.yml' > /tmp/feature-runner.yml
+          python - <<'PY'
+          from pathlib import Path
+          lines = Path('/tmp/feature-runner.yml').read_text(encoding='utf-8').splitlines()
+          start = next(i for i, line in enumerate(lines) if "python - <<'PY'" in line) + 1
+          end = next(i for i in range(start, len(lines)) if lines[i].strip() == 'PY')
+          body = []
+          for line in lines[start:end]:
+              body.append(line[10:] if line.startswith('          ') else line)
+          Path('/tmp/apply_reader_vocab.py').write_text('\n'.join(body) + '\n', encoding='utf-8')
+          PY
+          mkdir -p /tmp/reader-vocab
+          cp 'public-resources/kaoyan-english-2027-vocabulary/考研英语红宝书词汇27新版【基础词】qy自制.json' /tmp/reader-vocab/basic.json
+          cp 'public-resources/kaoyan-english-2027-vocabulary/考研英语红宝书词汇27新版【必考词】qy自制.json' /tmp/reader-vocab/required.json
+          cp 'public-resources/kaoyan-english-2027-vocabulary/考研英语红宝书词汇27新版【超纲词】qy自制.json' /tmp/reader-vocab/extra.json
+
+      - name: Apply patch to feature branch
+        shell: bash
+        run: |
+          git checkout -B feat/reader-annotations-v2 origin/feat/reader-annotations-v2
+          target='public-resources/kaoyan-english-2027-vocabulary'
+          mkdir -p "$target"
+          cp /tmp/reader-vocab/basic.json "$target/考研英语红宝书词汇27新版【基础词】qy自制.json"
+          cp /tmp/reader-vocab/required.json "$target/考研英语红宝书词汇27新版【必考词】qy自制.json"
+          cp /tmp/reader-vocab/extra.json "$target/考研英语红宝书词汇27新版【超纲词】qy自制.json"
+          python /tmp/apply_reader_vocab.py
+          rm -f .github/workflows/apply-reader-vocab-classification.yml
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+
+      - name: Validate feature branch
+        shell: bash
+        run: |
+          python -m json.tool 'public-resources/kaoyan-english-2027-vocabulary/考研英语红宝书词汇27新版【基础词】qy自制.json' > /dev/null
+          python -m json.tool 'public-resources/kaoyan-english-2027-vocabulary/考研英语红宝书词汇27新版【必考词】qy自制.json' > /dev/null
+          python -m json.tool 'public-resources/kaoyan-english-2027-vocabulary/考研英语红宝书词汇27新版【超纲词】qy自制.json' > /dev/null
+          grep -q 'const BASIC_DICT_URL' index.html
+          grep -q 'const REQUIRED_DICT_URL' index.html
+          grep -q 'const EXTRA_DICT_URL' index.html
+          grep -q 'decoration-green-600' index.html
+          grep -q 'decoration-sky-600' index.html
+          grep -q 'decoration-red-600' index.html
+          grep -q '<option value="exam">必考＋超纲</option>' index.html
+          test "$(grep -o 'bg-red-100/80' index.html | wc -l)" -eq 0
+          test "$(grep -o 'bg-sky-100/80' index.html | wc -l)" -eq 0
+          git diff --check
+
+      - name: Commit feature branch
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: classify vocabulary with underline-only markers'
+          git push origin HEAD:feat/reader-annotations-v2
+
+      - name: Remove temporary workflow from main
+        shell: bash
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          rm -f .github/workflows/run-reader-vocab-classification.yml
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+          git add -A
+          git commit -m 'chore: remove temporary vocabulary patch workflow'
+          git push origin main
