@@ -2979,12 +2979,14 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [rightPanelTab, setRightPanelTab] = useState(['outline', 'quiz', 'analysis', 'notes'].includes(migratedRightPanelTab) ? migratedRightPanelTab : 'outline');
             const [structureViewMode, setStructureViewMode] = useState(savedLayoutState.structureViewMode === 'mindmap' ? 'mindmap' : 'tree');
             const [rightPanelOpen, setRightPanelOpen] = useState(savedLayoutState.rightPanelOpen !== false);
+            const [isLearningPanelWide, setIsLearningPanelWide] = useState(() => typeof window === 'undefined' || typeof window.matchMedia !== 'function' ? true : window.matchMedia('(min-width: 1200px)').matches);
             const [splitRatio, setSplitRatio] = useState(Number.isFinite(savedLayoutState.splitRatio) ? Math.min(70, Math.max(52, savedLayoutState.splitRatio)) : 58);
             const [rightPanelAnalysis, setRightPanelAnalysis] = useState(null);
             const [rightPanelTranslationStack, setRightPanelTranslationStack] = useState([]);
             const [practicePanelResult, setPracticePanelResult] = useState(null);
             const [isFullTextMenuOpen, setIsFullTextMenuOpen] = useState(false);
             const fullTextMenuRef = useRef(null);
+            const isLearningPanelDocked = layoutMode === 'split' && rightPanelOpen && isLearningPanelWide;
             const restoredReadingNotes = localState.readingNotes && typeof localState.readingNotes === 'object'
                 ? localState.readingNotes
                 : { version: 1, articles: {} };
@@ -3008,6 +3010,19 @@ ${JSON.stringify(miniCorpus, null, 2)}
             useEffect(() => {
                 persistLocalState({ layoutState: { layoutMode, articleColumnMode, rightPanelTab, rightPanelOpen, splitRatio, structureViewMode } });
             }, [layoutMode, articleColumnMode, rightPanelTab, rightPanelOpen, splitRatio, structureViewMode]);
+
+            useEffect(() => {
+                if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+                const mediaQuery = window.matchMedia('(min-width: 1200px)');
+                const syncLearningPanelWidth = () => setIsLearningPanelWide(mediaQuery.matches);
+                syncLearningPanelWidth();
+                if (typeof mediaQuery.addEventListener === 'function') {
+                    mediaQuery.addEventListener('change', syncLearningPanelWidth);
+                    return () => mediaQuery.removeEventListener('change', syncLearningPanelWidth);
+                }
+                mediaQuery.addListener(syncLearningPanelWidth);
+                return () => mediaQuery.removeListener(syncLearningPanelWidth);
+            }, []);
 
             useEffect(() => {
                 if (!isFullTextMenuOpen) return undefined;
@@ -5243,10 +5258,10 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                                 apiConfig={apiConfig}
                                                 typographyConfig={typographyConfig}
                                                 savedResults={paragraphResults[String(idx)] || null}
-                                                inlineResultsEnabled={!(layoutMode === 'split' && rightPanelOpen)}
+                                                inlineResultsEnabled={!isLearningPanelDocked}
                                                 onPersistParagraphResult={handlePersistParagraphResult}
                                                 onOpenAnalysis={(result) => {
-                                                    if (layoutMode === 'split' && rightPanelOpen) {
+                                                    if (isLearningPanelDocked) {
                                                         if (result.kind === 'paragraph-quiz') {
                                                             setPracticePanelResult(result);
                                                             setRightPanelTab('quiz');
