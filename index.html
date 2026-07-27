@@ -498,8 +498,14 @@
         // 1. 外部动态数据源配置 (URLs)
         // ==========================================
         const CORPUS_URL = "https://gist.githubusercontent.com/mirrorlious97/1f649feb13d7da16cbdc3817841c16cc/raw/a90daca68e24f5892f68edc38793f858ceca5f05/12345.txt";
-        const PRESET_DICT_URL = "https://gist.githubusercontent.com/mirrorlious97/e39459d2885f9eb78257d4524e18df6f/raw/560c12500d61289af3a6f22d7e41e421fed4cdf3/console=v.%2520%25E5%25AE%2589%25E6%2585%25B0%2520n.%2520%25E6%258E%25A7%25E5%2588%25B6%25E5%258F%25B0.txt";
-        const HARD_DICT_URL = "https://gist.githubusercontent.com/mirrorlious97/9e36522b809b300f316fc5899bbb448f/raw/d685d0efe96e29603df00657ddd71b404f1baac4/%25E7%2594%259F%25E8%25AF%258D";
+        const VOCAB_RESOURCE_BASE = "./public-resources/kaoyan-english-2027-vocabulary";
+        const BASIC_DICT_URL = `${VOCAB_RESOURCE_BASE}/考研英语红宝书词汇27新版【基础词】qy自制.json`;
+        const REQUIRED_DICT_URL = `${VOCAB_RESOURCE_BASE}/考研英语红宝书词汇27新版【必考词】qy自制.json`;
+        const EXTRA_DICT_URL = `${VOCAB_RESOURCE_BASE}/考研英语红宝书词汇27新版【超纲词】qy自制.json`;
+
+        // 历史词库仅保留来源记录，不再参与“基础词 / 必考词 / 超纲词”分级。
+        const LEGACY_PRESET_DICT_GIST_URL = "https://gist.github.com/mirrorlious97/e39459d2885f9eb78257d4524e18df6f";
+        const LEGACY_HARD_DICT_GIST_URL = "https://gist.github.com/mirrorlious97/9e36522b809b300f316fc5899bbb448f";
 
         let REAL_EXAM_CORPUS = [];
 
@@ -516,6 +522,31 @@
                 }
             });
             return dict;
+        };
+
+        const parseVocabularyPack = (items) => {
+            const dict = {};
+            if (!Array.isArray(items)) return dict;
+
+            items.forEach(item => {
+                const words = Array.isArray(item?.en) ? item.en : [];
+                words.forEach(rawWord => {
+                    const key = String(rawWord || '').trim().toLowerCase();
+                    if (!key) return;
+                    dict[key] = {
+                        translation: String(item?.zh || '').trim(),
+                        category: String(item?.category || '').trim(),
+                        memo: String(item?.memo || '').trim()
+                    };
+                });
+            });
+            return dict;
+        };
+
+        const fetchVocabularyPack = async (url) => {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Failed to fetch vocabulary pack: ${response.status}`);
+            return parseVocabularyPack(await response.json());
         };
 
         const fetchAndParseCorpus = async (setCorpusCount) => {
@@ -567,8 +598,19 @@
             for (const dictObj of dicts) {
                 const { data, type } = dictObj;
                 if (!data) continue;
-
-                const check = (word) => data[word] ? { translation: data[word], type, word } : null;
+                const check = (word) => {
+                    const entry = data[word];
+                    if (!entry) return null;
+                    if (typeof entry === 'string') return { translation: entry, type, word };
+                    return {
+                        translation: entry.translation || entry.zh || '',
+                        category: entry.category || '',
+                        memo: entry.memo || '',
+                        note: entry.memo || '',
+                        type,
+                        word
+                    };
+                };
 
                 let match = check(w);
                 if (match) return match;
@@ -1217,24 +1259,64 @@ ${JSON.stringify(miniCorpus, null, 2)}
             }
         };
 
+        const VOCAB_TYPE_META = {
+            basic: {
+                label: '基础词',
+                underline: 'decoration-green-600 dark:decoration-green-400',
+                badge: 'bg-green-600 dark:bg-green-700',
+                text: 'text-green-700 dark:text-green-400'
+            },
+            required: {
+                label: '必考词',
+                underline: 'decoration-sky-600 dark:decoration-sky-400',
+                badge: 'bg-sky-600 dark:bg-sky-700',
+                text: 'text-sky-700 dark:text-sky-300'
+            },
+            extra: {
+                label: '超纲词',
+                underline: 'decoration-red-600 dark:decoration-red-400',
+                badge: 'bg-red-600 dark:bg-red-700',
+                text: 'text-red-700 dark:text-red-400'
+            },
+            custom: {
+                label: '个人词库',
+                underline: 'decoration-amber-500 dark:decoration-amber-400 decoration-dotted',
+                badge: 'bg-amber-600 dark:bg-amber-700',
+                text: 'text-amber-700 dark:text-amber-400'
+            },
+            phrase: {
+                label: '语法与佳句',
+                underline: 'decoration-violet-500 dark:decoration-violet-400 decoration-dashed',
+                badge: 'bg-violet-600 dark:bg-violet-700',
+                text: 'text-violet-700 dark:text-violet-300'
+            }
+        };
+
+        const shouldShowVocabType = (type, highlightMode) => {
+            if (highlightMode === 'none') return false;
+            if (highlightMode === 'all') return true;
+            if (highlightMode === 'exam') return type === 'required' || type === 'extra';
+            return highlightMode === type;
+        };
+
         const WordHighlighter = ({ text, activeDicts, highlightMode, onWordClick }) => {
             const parts = text.split(/([a-zA-Z]+-?[a-zA-Z]*)/g);
             return (
                 <Fragment>
                     {parts.map((part, index) => {
                         const match = getLemmaMatches(part, activeDicts);
-                        if (match && highlightMode !== 'none' && part.trim().length > 0) {
-                            const { translation, type, word: lemma } = match;
-
-                            const isRed = type === 'hard';
-                            if (highlightMode === 'red' && !isRed) return <span key={index} className="transition-all">{part}</span>;
-                            if (highlightMode === 'blue' && isRed) return <span key={index} className="transition-all">{part}</span>;
-
-                            let bgColor = isRed ? 'bg-red-100/80 dark:bg-red-900/40 border-b-[2px] border-red-300 dark:border-red-700' : 'bg-sky-100/80 dark:bg-sky-900/40 border-b-[2px] border-sky-300 dark:border-sky-700';
-                            let textColor = isRed ? 'text-red-900 dark:text-red-300' : 'text-[#004b87] dark:text-sky-300';
-
+                        if (match && part.trim().length > 0 && shouldShowVocabType(match.type, highlightMode)) {
+                            const { translation, type, word: lemma, category, memo } = match;
+                            const meta = VOCAB_TYPE_META[type] || VOCAB_TYPE_META.custom;
                             return (
-                                <span key={index} onClick={(e) => { e.stopPropagation(); onWordClick({ word: part, lemma, translation, type }); }} className={`mx-[1px] px-[2px] rounded-[3px] cursor-pointer transition-all hover:opacity-80 ${bgColor} ${textColor}`}>
+                                <span
+                                    key={index}
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onWordClick({ word: part, lemma, translation, type, category, memo, note: memo });
+                                    }}
+                                    className={`mx-[1px] cursor-pointer underline decoration-2 underline-offset-[3px] decoration-skip-ink-auto transition-[text-decoration-thickness,opacity] hover:decoration-[3px] hover:opacity-80 ${meta.underline}`}
+                                >
                                     {part}
                                 </span>
                             );
@@ -1899,21 +1981,44 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                     if (!phraseData) {
                         for (const dict of activeDicts) {
-                            if (dict.data && dict.data[lowerChunk]) {
-                                phraseData = { trans: dict.data[lowerChunk], type: dict.type };
+                            const entry = dict.data?.[lowerChunk];
+                            if (entry) {
+                                phraseData = typeof entry === 'string'
+                                    ? { trans: entry, type: dict.type }
+                                    : {
+                                        trans: entry.translation || entry.zh || '',
+                                        note: entry.memo || '',
+                                        category: entry.category || '',
+                                        type: dict.type
+                                    };
                                 break;
                             }
                         }
                     }
-
-                    if (phraseData && lowerChunk.includes(' ') && highlightMode !== 'none') {
-                        const isRed = phraseData.type === 'hard';
-                        if (highlightMode === 'red' && !isRed) return <span key={index}>{chunk}</span>;
-                        if (highlightMode === 'blue' && isRed) return <span key={index}>{chunk}</span>;
+                    if (phraseData && lowerChunk.includes(' ')) {
+                        const phraseType = phraseData.type || 'phrase';
+                        if (!shouldShowVocabType(phraseType, highlightMode)) return <span key={index}>{chunk}</span>;
 
                         const isActive = activeNote && activeNote.word === chunk && activeNote.isPhrase;
+                        const meta = VOCAB_TYPE_META[phraseType] || VOCAB_TYPE_META.phrase;
                         return (
-                            <span key={index} onClick={(e) => { e.stopPropagation(); setActiveNote({ word: chunk, isPhrase: true, trans: phraseData.trans || phraseData.translation, note: phraseData.note, type: phraseData.type }); }} className={`cursor-pointer mx-0.5 border-b-[2px] border-dashed transition-all duration-200 ${isActive ? 'border-sky-400 bg-sky-100/60 text-[#004b87] rounded-sm px-0.5 dark:bg-sky-900/50 dark:border-sky-500 dark:text-sky-200' : 'border-sky-300 hover:border-sky-400 hover:bg-sky-50 text-gray-900 dark:text-gray-200 dark:border-sky-700 dark:hover:bg-sky-900/30'}`}>{chunk}</span>
+                            <span
+                                key={index}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    setActiveNote({
+                                        word: chunk,
+                                        isPhrase: true,
+                                        trans: phraseData.trans || phraseData.translation,
+                                        note: phraseData.note,
+                                        category: phraseData.category,
+                                        type: phraseType
+                                    });
+                                }}
+                                className={`cursor-pointer mx-0.5 underline decoration-2 underline-offset-[3px] decoration-skip-ink-auto transition-[text-decoration-thickness,opacity] hover:decoration-[3px] hover:opacity-80 ${meta.underline} ${isActive ? 'decoration-[3px]' : ''}`}
+                            >
+                                {chunk}
+                            </span>
                         );
                     }
                     return <WordHighlighter key={index} text={chunk} activeDicts={activeDicts} highlightMode={highlightMode} onWordClick={handleWordClick} />;
@@ -2062,11 +2167,12 @@ ${JSON.stringify(miniCorpus, null, 2)}
                         <div className="mt-4 p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl animate-fade-in-down relative shadow-lg z-20">
                             <button onClick={() => setActiveNote(null)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full p-1 transition-colors"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
                             <div className="flex items-center space-x-2 mb-2">
-                                <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm tracking-wider ${activeNote.type === 'hard' ? 'bg-red-600 dark:bg-red-700' : 'bg-sky-600 dark:bg-sky-700'}`}>{activeNote.isPhrase ? "语法与佳句" : (activeNote.type === 'hard' ? "考研生词" : "词库匹配")}</span>
-                                <span className={`font-serif font-bold text-[15px] ${activeNote.type === 'hard' ? 'text-red-800 dark:text-red-400' : 'text-[#004b87] dark:text-sky-300'}`}>{activeNote.word}</span>
+                                <span className={`text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm tracking-wider ${(VOCAB_TYPE_META[activeNote.type] || VOCAB_TYPE_META.custom).badge}`}>{activeNote.isPhrase ? "语法与佳句" : (VOCAB_TYPE_META[activeNote.type] || VOCAB_TYPE_META.custom).label}</span>
+                                <span className={`font-serif font-bold text-[15px] ${(VOCAB_TYPE_META[activeNote.type] || VOCAB_TYPE_META.custom).text}`}>{activeNote.word}</span>
                                 {activeNote.lemma && activeNote.lemma !== activeNote.word.toLowerCase() && <span className="text-[12px] text-gray-400 dark:text-gray-500 font-mono">({activeNote.lemma})</span>}
                             </div>
                             <div className="text-[13px] font-semibold text-gray-800 dark:text-gray-200 mb-2 whitespace-pre-wrap">{activeNote.translation || activeNote.trans}</div>
+                            {activeNote.category && <div className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">{activeNote.category}</div>}
                             {activeNote.note && <div className="text-[13.5px] text-gray-700 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-700">{activeNote.note}</div>}
 
                             {!activeNote.isPhrase && (
@@ -2967,7 +3073,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [readingMode, setReadingMode] = useState('intensive');
             const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
 
-            const [highlightMode, setHighlightMode] = useState('red');
+            const [highlightMode, setHighlightMode] = useState('exam');
 
             const [fullTranslations, setFullTranslations] = useState([]);
             const [isFullTransLoading, setIsFullTransLoading] = useState(false);
@@ -2997,8 +3103,9 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [dictInputText, setDictInputText] = useState("");
             const [customDict, setCustomDict] = useState(localState.customDict || {});
 
-            const [presetDict, setPresetDict] = useState({});
-            const [hardDict, setHardDict] = useState({});
+            const [basicDict, setBasicDict] = useState({});
+            const [requiredDict, setRequiredDict] = useState({});
+            const [extraDict, setExtraDict] = useState({});
 
             const [history, setHistory] = useState(localState.history || []);
             const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
@@ -3025,17 +3132,26 @@ ${JSON.stringify(miniCorpus, null, 2)}
             const [corpusCount, setCorpusCount] = useState(0);
 
             const activeDicts = useMemo(() => [
-                { data: hardDict, type: 'hard' },
-                { data: customDict, type: 'custom' },
-                { data: presetDict, type: 'preset' },
-                { data: VOCAB_DB.kaoyan, type: 'default' },
-                { data: VOCAB_DB.cet6, type: 'default' }
-            ], [hardDict, customDict, presetDict]);
+                { data: extraDict, type: 'extra' },
+                { data: requiredDict, type: 'required' },
+                { data: basicDict, type: 'basic' },
+                { data: customDict, type: 'custom' }
+            ], [extraDict, requiredDict, basicDict, customDict]);
 
             useEffect(() => {
                 fetchAndParseCorpus(setCorpusCount);
-                fetch(PRESET_DICT_URL).then(r=>r.text()).then(t=>setPresetDict(parseDictText(t))).catch(console.error);
-                fetch(HARD_DICT_URL).then(r=>r.text()).then(t=>setHardDict(parseDictText(t))).catch(console.error);
+                Promise.all([
+                    fetchVocabularyPack(BASIC_DICT_URL),
+                    fetchVocabularyPack(REQUIRED_DICT_URL),
+                    fetchVocabularyPack(EXTRA_DICT_URL)
+                ]).then(([basic, required, extra]) => {
+                    setBasicDict(basic);
+                    setRequiredDict(required);
+                    setExtraDict(extra);
+                }).catch(error => {
+                    console.error('Error loading classified vocabulary packs:', error);
+                    window.showToast('分级词库加载失败，请刷新后重试', 'error');
+                });
             }, []);
 
             useEffect(() => {
@@ -5079,10 +5195,12 @@ ${JSON.stringify(miniCorpus, null, 2)}
 
                                         {readingMode === 'intensive' && (
                                             <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="词汇高亮范围" title="词汇高亮范围" className="h-9 w-[112px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
-                                                <option value="red">考研生词</option>
-                                                <option value="both">全部词汇</option>
-                                                <option value="blue">基础词汇</option>
-                                                <option value="none">关闭高亮</option>
+                                                <option value="exam">必考＋超纲</option>
+                                                <option value="all">全部词汇</option>
+                                                <option value="basic">基础词</option>
+                                                <option value="required">必考词</option>
+                                                <option value="extra">超纲词</option>
+                                                <option value="none">关闭标注</option>
                                             </select>
                                         )}
 
