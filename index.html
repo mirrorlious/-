@@ -5098,7 +5098,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                             <button className="fixed inset-0 z-40 cursor-default" onClick={() => setIsHeaderMenuOpen(false)} aria-label="关闭主菜单"></button>
                                             <div className="absolute left-0 top-12 z-50 w-64 p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-sm shadow-lg">
                                                 <div className="px-3 py-2 mb-1 text-[11px] text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
-                                                    {corpusCount} 句真题 · {Object.keys(presetDict).length} 个预设词 · {Object.keys(hardDict).length} 个生词
+                                                    {corpusCount} 句真题 · {Object.keys(requiredDict).length} 个预设词 · {Object.keys(extraDict).length} 个生词
                                                 </div>
                                                 <button onClick={() => { setIsHistoryDrawerOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">阅读库</button>
                                                 <button onClick={() => { markdownInputRef.current?.click(); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">导入 Markdown 备份</button>
@@ -5112,7 +5112,7 @@ ${JSON.stringify(miniCorpus, null, 2)}
                                 </div>
                                 <div className="hidden lg:flex shrink-0 items-center gap-1">
                                     <div className="mr-2 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                        <span>{corpusCount} 句真题</span><span className="w-px h-3 bg-gray-200 dark:bg-gray-700"></span><span>{Object.keys(hardDict).length} 个生词</span>
+                                        <span>{corpusCount} 句真题</span><span className="w-px h-3 bg-gray-200 dark:bg-gray-700"></span><span>{Object.keys(extraDict).length} 个生词</span>
                                     </div>
                                     <button onClick={() => setIsTypographyModalOpen(true)} className="min-h-[40px] px-3 inline-flex items-center gap-2 rounded-md text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M7 12h10M10 18h4"></path></svg>排版
