@@ -1,6 +1,11 @@
 name: Fix reader legacy dictionary references
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/trigger-fix-reader-legacy-dict.txt
   pull_request:
     branches:
       - main
@@ -71,13 +76,14 @@ jobs:
             git push origin HEAD:feat/reader-annotations-v2
           fi
 
-      - name: Remove one-shot workflow from main
+      - name: Remove one-shot workflow and trigger from main
         if: always()
         shell: bash
         run: |
           set -euo pipefail
           git checkout main
           rm -f .github/workflows/fix-reader-legacy-dict.yml
+          rm -f .github/trigger-fix-reader-legacy-dict.txt
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
