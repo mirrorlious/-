@@ -1,20 +1,11 @@
 {
-  "name": "-",
+  "name": "yang-reader",
   "version": "1.0.0",
-  "description": "一个面向外刊精读和考研英语阅读训练的单页应用。项目从粘贴源码复刻整理而来，保留原有 React + Tailwind CDN 形态，无需构建即可部署到 GitHub Pages。",
-  "main": "index.js",
+  "private": true,
+  "description": "Yang English Reader",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "node scripts/build-cloudbase-v2.cjs",
+    "test": "echo \"No tests configured\""
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/mirrorlious/-.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/mirrorlious/-/issues"
-  },
-  "homepage": "https://github.com/mirrorlious/-#readme"
+  "license": "ISC"
 }
