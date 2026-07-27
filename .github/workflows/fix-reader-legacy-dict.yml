@@ -1,0 +1,88 @@
+name: Fix reader legacy dictionary references
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/trigger-fix-reader-legacy-dict.txt
+
+permissions:
+  contents: write
+
+jobs:
+  fix-reader:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch production reader branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feat/reader-annotations-v2
+          git checkout -B feat/reader-annotations-v2 origin/feat/reader-annotations-v2
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+
+          legacy = ('hardDict', 'setHardDict', 'presetDict', 'setPresetDict')
+          found = []
+          for line_no, line in enumerate(text.splitlines(), 1):
+              if any(token in line for token in legacy):
+                  found.append((line_no, line.strip()))
+
+          print('Legacy references before patch:')
+          for item in found:
+              print(f'{item[0]}: {item[1]}')
+
+          replacements = [
+              ('setHardDict', 'setExtraDict'),
+              ('setPresetDict', 'setRequiredDict'),
+              ('hardDict', 'extraDict'),
+              ('presetDict', 'requiredDict'),
+          ]
+          for old, new in replacements:
+              text = text.replace(old, new)
+
+          remaining = [token for token in legacy if token in text]
+          if remaining:
+              raise SystemExit(f'Legacy identifiers remain: {remaining}')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          grep -nE 'hardDict|presetDict|setHardDict|setPresetDict' index.html && exit 1 || true
+          grep -n "const activeDicts" index.html
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No legacy dictionary references needed fixing.'
+          else
+            git commit -m "fix: remove legacy dictionary references"
+            git push origin HEAD:feat/reader-annotations-v2
+          fi
+
+      - name: Remove one-shot workflow from main
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout main
+          rm -f .github/workflows/fix-reader-legacy-dict.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: remove one-shot legacy dictionary fixer"
+          git push origin main
