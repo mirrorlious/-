@@ -34,6 +34,23 @@ jobs:
           payload = ''.join(match.group(1).split())
           script = gzip.decompress(base64.b64decode(payload)).decode('utf-8')
 
+          bundle_old = '''replace_once(
+"""                        contentHash: sourceText ? await hashText(sourceText) : ''
+""",
+"""                        contentHash: sourceText ? await hashText(sourceText) : '',
+                        completedAt: existing?.article?.completedAt || record?.completedAt || null
+""",
+'preserve completion in bundle')'''
+          bundle_new = '''sub_once(
+    r"(contentHash: sourceText \\? await hashText\\(sourceText\\) : '')(\\n                    \\},\\n                    results:)",
+    r"\\1,\\n                        completedAt: existing?.article?.completedAt || record?.completedAt || null\\2",
+    'preserve completion in bundle',
+    flags=re.M
+)'''
+          if bundle_old not in script:
+              raise SystemExit('Completion bundle replacement hook not found')
+          script = script.replace(bundle_old, bundle_new, 1)
+
           # Preserve JavaScript backslash sequences inside Python replacement literals.
           script = script.replace('old_translation = """', 'old_translation = r"""', 1)
           script = re.sub(r'(replace_once\(\n\s*)"""', r'\1r"""', script)
