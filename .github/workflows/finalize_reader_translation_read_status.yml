@@ -1,0 +1,155 @@
+name: Finalize translation alignment and reading status
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+    paths:
+      - TASK_LOGS/.trigger-finalize-translation-read-status
+
+permissions:
+  contents: write
+
+jobs:
+  finalize-reader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+
+      - name: Apply validated reader patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, gzip, re, subprocess, sys
+
+          workflow = Path('.github/workflows/apply_reader_translation_read_status.yml').read_text(encoding='utf-8')
+          match = re.search(r"cat > /tmp/reader_patch\.b64 <<'B64'\n\s*([A-Za-z0-9+/=\n ]+?)\n\s*B64", workflow)
+          if not match:
+              raise SystemExit('Embedded patch payload not found')
+          payload = ''.join(match.group(1).split())
+          script = gzip.decompress(base64.b64decode(payload)).decode('utf-8')
+
+          bundle_old = '''replace_once(
+"""                        contentHash: sourceText ? await hashText(sourceText) : ''
+""",
+"""                        contentHash: sourceText ? await hashText(sourceText) : '',
+                        completedAt: existing?.article?.completedAt || record?.completedAt || null
+""",
+'preserve completion in bundle')'''
+          bundle_new = '''sub_once(
+    r"(contentHash: sourceText \\? await hashText\\(sourceText\\) : '')(\\n                    \\},\\n                    results:)",
+    r"\\1,\\n                        completedAt: existing?.article?.completedAt || record?.completedAt || null\\2",
+    'preserve completion in bundle',
+    flags=re.M
+)'''
+          if bundle_old not in script:
+              raise SystemExit('Completion bundle replacement hook not found')
+          script = script.replace(bundle_old, bundle_new, 1)
+
+          # Preserve JavaScript backslash sequences inside Python replacement literals.
+          script = script.replace('old_translation = """', 'old_translation = r"""', 1)
+          script = re.sub(r'(replace_once\(\n\s*)"""', r'\1r"""', script)
+          script = re.sub(r'(""",\n\s*)"""', r'\1r"""', script)
+
+          old = "replace_once(old_translation, new_translation, 'replace full translation protocol')"
+          replacement = '''sub_once(
+              r"        const callGeminiFullTranslation = async \\(fullText, apiConfig\\) => \\{[\\s\\S]*?\\n        \\};\\n\\n        const callGeminiTranslation",
+              new_translation + "\\n        const callGeminiTranslation",
+              'replace full translation protocol',
+              flags=re.M
+          )'''
+          if old not in script:
+              raise SystemExit('Translation replacement hook not found in patch')
+
+          patch_path = Path('/tmp/patch_reader.py')
+          patch_path.write_text(script.replace(old, replacement, 1), encoding='utf-8')
+          subprocess.run([sys.executable, '-m', 'py_compile', str(patch_path)], check=True)
+          subprocess.run([sys.executable, str(patch_path)], check=True)
+          PY
+
+      - name: Validate behavior markers and fragile paths
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('index.html').read_text(encoding='utf-8')
+          required = [
+              'Translation protocol v2',
+              'generateStructuredFullTranslation',
+              'reader-translation-link-active',
+              'data-reader-full-translation-index',
+              'setRecordCompleted',
+              'clearDataConfirmStage',
+              '确认清空所选数据',
+              '✓ 已读完',
+              'onSelectionChange',
+              'completedAt'
+          ]
+          missing = [marker for marker in required if marker not in text]
+          if missing:
+              raise SystemExit(f'Missing markers: {missing}')
+          forbidden = [
+              "translatedChunks.filter(Boolean).join('\\n\\n')",
+              "translated.filter(Boolean).join('\\n\\n').split"
+          ]
+          present = [marker for marker in forbidden if marker in text]
+          if present:
+              raise SystemExit(f'Fragile translation code remains: {present}')
+          print('Reader marker validation passed')
+          PY
+          git diff --check
+
+      - name: Parse JSX with Babel
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          source = Path('index.html').read_text(encoding='utf-8')
+          match = re.search(r'<script type="text/babel" data-type="module">([\s\S]*?)</script>', source)
+          if not match:
+              raise SystemExit('Reader Babel script not found')
+          Path('/tmp/reader.jsx').write_text(match.group(1), encoding='utf-8')
+          PY
+          npx --yes --package @babel/core --package @babel/cli --package @babel/preset-react babel /tmp/reader.jsx --presets @babel/preset-react --out-file /tmp/reader.js
+
+      - name: Record work, remove temporary runners and push
+        shell: bash
+        run: |
+          cat > TASK_LOGS/2026-07-28-translation-alignment-reading-status.md <<'LOG'
+          # 全文翻译对齐、选区联动与阅读完成状态
+
+          ## 本轮完成
+
+          - 全文翻译改用固定段落 ID 与句子 ID 的 JSON 协议，不再依靠空行数量对齐。
+          - 继续批量翻译多个段落；仅在模型漏回编号时补译缺失段落，避免整篇错位和无谓重做。
+          - 英文选区可定位对应中文句子：新协议按句高亮，旧缓存兼容为整段高亮。
+          - 阅读工具栏加入“完成阅读”图标，阅读库支持标记、取消标记与“已读完”徽章。
+          - 清理阅读数据改为两阶段确认，可分别清理已读标记、阅读记录、翻译与解析、AI/TTS/PDF/书籍/批量任务缓存。
+          - Markdown 数据包保留阅读完成状态；旧字符串译文继续兼容。
+
+          ## 验证
+
+          - `git diff --check`
+          - Babel JSX 解析
+          - 结构化翻译、联动高亮、阅读状态、Markdown 恢复与二次清理窗口源码标记检查
+          LOG
+
+          rm -f \
+            .github/workflows/apply_reader_translation_read_status.yml \
+            .github/workflows/apply_reader_translation_read_status_debug.yml \
+            .github/workflows/finalize_reader_translation_read_status.yml \
+            TASK_LOGS/.trigger-translation-read-status \
+            TASK_LOGS/.trigger-translation-read-status-debug \
+            TASK_LOGS/.trigger-finalize-translation-read-status \
+            TASK_LOGS/translation-patch-error.txt
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat: align translations and track reading completion"
+          git push origin HEAD:feat/reader-annotations-v2
