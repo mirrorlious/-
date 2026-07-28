@@ -33,6 +33,12 @@ jobs:
               raise SystemExit('Embedded patch payload not found')
           payload = ''.join(match.group(1).split())
           script = gzip.decompress(base64.b64decode(payload)).decode('utf-8')
+
+          # Preserve JavaScript backslash sequences inside Python replacement literals.
+          script = script.replace('old_translation = """', 'old_translation = r"""', 1)
+          script = re.sub(r'(replace_once\(\n\s*)"""', r'\1r"""', script)
+          script = re.sub(r'(""",\n\s*)"""', r'\1r"""', script)
+
           old = "replace_once(old_translation, new_translation, 'replace full translation protocol')"
           replacement = '''sub_once(
               r"        const callGeminiFullTranslation = async \\(fullText, apiConfig\\) => \\{[\\s\\S]*?\\n        \\};\\n\\n        const callGeminiTranslation",
