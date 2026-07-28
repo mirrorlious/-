@@ -30,7 +30,13 @@ jobs:
           if not match:
               raise SystemExit('Embedded patch payload not found')
           payload = ''.join(match.group(1).split())
-          Path('/tmp/patch_reader.py').write_bytes(gzip.decompress(base64.b64decode(payload)))
+          patch_path = Path('/tmp/patch_reader.py')
+          script = gzip.decompress(base64.b64decode(payload)).decode('utf-8')
+          old = "replace_once(old_translation, new_translation, 'replace full translation protocol')"
+          new = "sub_once(r\"        const callGeminiFullTranslation = async \\\\(fullText, apiConfig\\\\) => \\\\{[\\\\s\\\\S]*?\\\\n        \\\\};\\\\n\\\\n        const callGeminiTranslation\", new_translation + \\"\\\\n        const callGeminiTranslation\\", 'replace full translation protocol', flags=re.M)"
+          if old not in script:
+              raise SystemExit('Translation replacement hook not found in patch')
+          patch_path.write_text(script.replace(old, new, 1), encoding='utf-8')
           PY
           python -m py_compile /tmp/patch_reader.py
 
