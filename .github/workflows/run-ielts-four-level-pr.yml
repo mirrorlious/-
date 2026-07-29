@@ -96,6 +96,7 @@ if lemma_count != 1:
           rm -f .github/workflows/apply-ielts-four-level-vocabulary.yml
           rm -f tools/ielts-vocabulary-4-level.payload.b64
           rm -f tools/ielts-payload-correct.part*
+          rm -f tools/ielts-build-trigger.txt
           rmdir tools 2>/dev/null || true
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
