@@ -1,0 +1,116 @@
+name: Integrate IELTS vocabulary into PWA main v2
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.event.pull_request.head.ref == 'ci/integrate-ielts-pwa-main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch IELTS source branch
+        run: git fetch origin feat/ielts-four-level-vocabulary
+
+      - name: Run corrected integration port
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/integrate-ielts-pwa-main.yml')
+          text = workflow.read_text(encoding='utf-8')
+          step_start = text.index('      - name: Port IELTS four-level vocabulary into Vite app')
+          run_marker = text.index('        run: |', step_start)
+          body_start = text.index('\n', run_marker) + 1
+          body_end = text.index('\n      - name: Validate vocabulary data', body_start)
+          lines = text[body_start:body_end].splitlines()
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+
+          selector_start = script.index("replace_once(\n    app,\n    \"\"\"                                    <select")
+          selector_end = script.index("\n\nold_meta =", selector_start)
+          script = script[:selector_start] + "# Selector is patched with a regex below.\n" + script[selector_end + 2:]
+          Path('/tmp/port-ielts.sh').write_text(script, encoding='utf-8')
+          PY
+          bash /tmp/port-ielts.sh
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('src/App.jsx')
+          text = path.read_text(encoding='utf-8')
+          pattern = re.compile(
+              r'<select value=\{highlightMode\} onChange=\{\(event\) => setHighlightMode\(event\.target\.value\)\} aria-label="词汇高亮范围" title="词汇高亮范围" className="h-9 w-\[112px\][^"]*">\s*'
+              r'<option value="exam">必考＋超纲</option>\s*'
+              r'<option value="all">全部词汇</option>\s*'
+              r'<option value="basic">基础词</option>\s*'
+              r'<option value="required">必考词</option>\s*'
+              r'<option value="extra">超纲词</option>\s*'
+              r'<option value="none">关闭标注</option>\s*'
+              r'</select>',
+              re.S,
+          )
+          replacement = '''<select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="词汇高亮范围" title="词汇高亮范围" className="h-9 w-[124px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                        <option value="daily">核心＋场景</option>
+                                        <option value="all">全部雅思词</option>
+                                        <option value="core">雅思核心词</option>
+                                        <option value="scenario">雅思场景词</option>
+                                        <option value="overlap">基础重合词</option>
+                                        <option value="extended">雅思扩展词</option>
+                                        <option value="none">关闭标注</option>
+                                    </select>'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'IELTS selector regex expected 1 match, found {count}')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate vocabulary data and source integration
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('public-resources/ielts-vocabulary/ielts-vocabulary-4-level.json').read_text(encoding='utf-8'))
+          assert len(data) == 1992, len(data)
+          counts = {}
+          for item in data.values():
+              counts[item['ieltsLevel']] = counts.get(item['ieltsLevel'], 0) + 1
+          assert counts == {'extended': 554, 'core': 374, 'overlap': 739, 'scenario': 325}, counts
+          PY
+          grep -q "registerPwa" src/main.jsx
+          grep -q "IELTS_DICT_URL" src/core/vocabulary.js
+          grep -q "核心＋场景" src/App.jsx
+          grep -q "雅思基础重合词" src/components/Paragraph.jsx
+          git diff --check
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Build production app
+        run: npm run build
+
+      - name: Commit integration to main
+        run: |
+          rm -f .github/workflows/integrate-ielts-pwa-main.yml
+          rm -f .github/workflows/integrate-ielts-pwa-main-v2.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: integrate IELTS vocabulary layers with PWA app'
+          git push origin HEAD:main
