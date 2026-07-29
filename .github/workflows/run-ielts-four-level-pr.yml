@@ -52,6 +52,10 @@ jobs:
           body_end = text.index('\n      - name: Validate generated resources', body_start)
           lines = text[body_start:body_end].splitlines()
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          script = script.replace(
+              "text = INDEX.read_text(encoding='utf-8-sig')",
+              "text = INDEX.read_text(encoding='utf-8-sig').replace('\\r\\n', '\\n')"
+          )
           Path('/tmp/build-ielts-vocabulary.sh').write_text(script, encoding='utf-8')
           PY
           bash /tmp/build-ielts-vocabulary.sh
