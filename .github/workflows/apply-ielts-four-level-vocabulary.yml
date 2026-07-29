@@ -1,0 +1,444 @@
+name: Apply IELTS four-level vocabulary
+
+on:
+  push:
+    branches:
+      - feat/ielts-four-level-vocabulary
+    paths:
+      - .github/workflows/apply-ielts-four-level-vocabulary.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out IELTS feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/ielts-four-level-vocabulary
+          fetch-depth: 0
+
+      - name: Build four-level IELTS vocabulary and patch reader
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64
+          import gzip
+          import json
+          import re
+
+          ROOT = Path('.')
+          PAYLOAD = ROOT / 'tools/ielts-vocabulary-4-level.payload.b64'
+          OUTPUT_DIR = ROOT / 'public-resources/ielts-vocabulary'
+          OUTPUT_JSON = OUTPUT_DIR / 'ielts-vocabulary-4-level.json'
+          OUTPUT_REPORT = OUTPUT_DIR / 'README.md'
+          INDEX = ROOT / 'index.html'
+
+          REDBOOK_DIR = ROOT / 'public-resources/kaoyan-english-2027-vocabulary'
+          PACKS = [
+              ('考研基础词', REDBOOK_DIR / '考研英语红宝书词汇27新版【基础词】qy自制.json'),
+              ('考研必考词', REDBOOK_DIR / '考研英语红宝书词汇27新版【必考词】qy自制.json'),
+              ('考研超纲词', REDBOOK_DIR / '考研英语红宝书词汇27新版【超纲词】qy自制.json'),
+          ]
+
+          def normalize(value):
+              return re.sub(r'\s+', ' ', str(value or '').strip().lower())
+
+          def load_pack(path):
+              items = json.loads(path.read_text(encoding='utf-8-sig'))
+              result = {}
+              for item in items:
+                  for raw_word in item.get('en') or []:
+                      word = normalize(raw_word)
+                      if word:
+                          result[word] = {
+                              'translation': str(item.get('zh') or '').strip(),
+                              'category': str(item.get('category') or '').strip(),
+                          }
+              return result
+
+          compressed = base64.b64decode(PAYLOAD.read_text(encoding='utf-8').strip())
+          preliminary = json.loads(gzip.decompress(compressed).decode('utf-8'))
+          redbook_maps = [(label, load_pack(path)) for label, path in PACKS]
+
+          raw_level_map = {'c': 'core', 's': 'scenario', 'b': 'base', 'e': 'extended'}
+          quality_map = {'v': 'verified', 'r': 'review', 'c': 'corrected'}
+          advice_map = {
+              'core': '优先学习',
+              'scenario': '正常学习',
+              'overlap': '可选择跳过',
+              'extended': '后期学习',
+          }
+          reason_map = {
+              'core': '雅思阅读、听力、写作或口语价值明显，建议优先掌握。',
+              'scenario': '住宿、旅游、课程、图书馆、交通或工作咨询等雅思听力场景常见。',
+              'overlap': '与考研红宝书词汇重合，但仍具有雅思理解或表达价值。',
+              'extended': '词义较专业、使用频率较低或证据较弱，适合后期扩展。',
+          }
+
+          final_dict = {}
+          counts = {'core': 0, 'scenario': 0, 'overlap': 0, 'extended': 0}
+          overlap_counts = {label: 0 for label, _ in PACKS}
+
+          for term, payload in preliminary.items():
+              source_translation, raw_code, quality_code = payload
+              overlap_tags = []
+              redbook_translation = ''
+              redbook_categories = []
+              for label, pack in redbook_maps:
+                  match = pack.get(term)
+                  if not match:
+                      continue
+                  overlap_tags.append(label)
+                  overlap_counts[label] += 1
+                  if not redbook_translation and match.get('translation'):
+                      redbook_translation = match['translation']
+                  if match.get('category'):
+                      redbook_categories.append(match['category'])
+
+              raw_level = raw_level_map.get(raw_code, 'base')
+              if raw_level == 'base':
+                  final_level = 'overlap' if overlap_tags else 'extended'
+              else:
+                  final_level = raw_level
+
+              counts[final_level] += 1
+              final_dict[term] = {
+                  'translation': redbook_translation or source_translation,
+                  'ieltsLevel': final_level,
+                  'learningAdvice': advice_map[final_level],
+                  'ieltsReason': reason_map[final_level],
+                  'overlapTags': overlap_tags,
+                  'redbookCategories': redbook_categories,
+                  'qualityStatus': quality_map.get(quality_code, 'review'),
+              }
+
+          OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+          OUTPUT_JSON.write_text(
+              json.dumps(final_dict, ensure_ascii=False, separators=(',', ':')),
+              encoding='utf-8'
+          )
+
+          report = f'''# 雅思四层词汇 · 数据说明
+
+本词库基于用户提供的雅思学习资料进行轻度去重，并与仓库中的 2027 考研英语红宝书三类词表交叉标注。
+
+## 数量
+
+- 总词条：{len(final_dict)}
+- 雅思核心词：{counts['core']}
+- 雅思场景词：{counts['scenario']}
+- 雅思基础重合词：{counts['overlap']}
+- 雅思扩展词：{counts['extended']}
+
+## 红宝书重合
+
+- 考研基础词命中：{overlap_counts['考研基础词']}
+- 考研必考词命中：{overlap_counts['考研必考词']}
+- 考研超纲词命中：{overlap_counts['考研超纲词']}
+
+## 原则
+
+- 与考研词汇重合不是删除理由，只作为次级标签。
+- 仅合并标准词形完全相同的机械重复。
+- OCR 风险词继续保留，并以 `qualityStatus: review` 标记。
+- 点击词汇时显示雅思层级、学习建议、判定说明和红宝书重合标签。
+'''
+          OUTPUT_REPORT.write_text(report, encoding='utf-8')
+
+          text = INDEX.read_text(encoding='utf-8-sig')
+
+          def replace_once(source, old, new, label):
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return source.replace(old, new, 1)
+
+          text = replace_once(
+              text,
+              "        const EXTRA_DICT_URL = `${VOCAB_RESOURCE_BASE}/考研英语红宝书词汇27新版【超纲词】qy自制.json`;",
+              "        const EXTRA_DICT_URL = `${VOCAB_RESOURCE_BASE}/考研英语红宝书词汇27新版【超纲词】qy自制.json`;\n        const IELTS_DICT_URL = './public-resources/ielts-vocabulary/ielts-vocabulary-4-level.json';",
+              'IELTS vocabulary URL'
+          )
+
+          parser_marker = "        const fetchAndParseCorpus = async (setCorpusCount) => {"
+          ielts_parser = '''        const parseIELTSVocabularyPack = (items) => {
+              const dict = {};
+              if (!items || typeof items !== 'object' || Array.isArray(items)) return dict;
+              Object.entries(items).forEach(([rawWord, item]) => {
+                  const key = String(rawWord || '').trim().toLowerCase();
+                  if (!key || !item) return;
+                  dict[key] = {
+                      translation: String(item.translation || '').trim(),
+                      ieltsLevel: String(item.ieltsLevel || 'extended').trim(),
+                      learningAdvice: String(item.learningAdvice || '').trim(),
+                      ieltsReason: String(item.ieltsReason || '').trim(),
+                      overlapTags: Array.isArray(item.overlapTags) ? item.overlapTags : [],
+                      redbookCategories: Array.isArray(item.redbookCategories) ? item.redbookCategories : [],
+                      qualityStatus: String(item.qualityStatus || 'review').trim()
+                  };
+              });
+              return dict;
+          };
+
+          const fetchIELTSVocabularyPack = async (url) => {
+              const response = await fetch(url);
+              if (!response.ok) throw new Error(`Failed to fetch IELTS vocabulary pack: ${response.status}`);
+              return parseIELTSVocabularyPack(await response.json());
+          };
+
+'''
+          if ielts_parser.strip() not in text:
+              text = replace_once(text, parser_marker, ielts_parser + parser_marker, 'IELTS parser insertion')
+
+          old_entry_return = '''                    return {
+                        translation: entry.translation || entry.zh || '',
+                        category: entry.category || '',
+                        memo: entry.memo || '',
+                        note: entry.memo || '',
+                        type,
+                        word
+                    };'''
+          new_entry_return = '''                    return {
+                        translation: entry.translation || entry.zh || '',
+                        category: entry.category || '',
+                        memo: entry.memo || '',
+                        note: entry.memo || '',
+                        type: entry.ieltsLevel || type,
+                        learningAdvice: entry.learningAdvice || '',
+                        ieltsReason: entry.ieltsReason || '',
+                        overlapTags: Array.isArray(entry.overlapTags) ? entry.overlapTags : [],
+                        redbookCategories: Array.isArray(entry.redbookCategories) ? entry.redbookCategories : [],
+                        qualityStatus: entry.qualityStatus || '',
+                        word
+                    };'''
+          text = replace_once(text, old_entry_return, new_entry_return, 'lemma metadata propagation')
+
+          meta_pattern = re.compile(r"        const VOCAB_TYPE_META = \{.*?\n        \};\n\n        const shouldShowVocabType = \(type, highlightMode\) => \{.*?\n        \};", re.S)
+          new_meta = '''        const VOCAB_TYPE_META = {
+            core: {
+                label: '雅思核心词',
+                advice: '优先学习',
+                underline: 'decoration-sky-600 dark:decoration-sky-400',
+                badge: 'bg-sky-600 dark:bg-sky-700',
+                text: 'text-sky-700 dark:text-sky-300'
+            },
+            scenario: {
+                label: '雅思场景词',
+                advice: '正常学习',
+                underline: 'decoration-emerald-600 dark:decoration-emerald-400',
+                badge: 'bg-emerald-600 dark:bg-emerald-700',
+                text: 'text-emerald-700 dark:text-emerald-300'
+            },
+            overlap: {
+                label: '雅思基础重合词',
+                advice: '可选择跳过',
+                underline: 'decoration-amber-500 dark:decoration-amber-400',
+                badge: 'bg-amber-500 dark:bg-amber-600',
+                text: 'text-amber-700 dark:text-amber-300'
+            },
+            extended: {
+                label: '雅思扩展词',
+                advice: '后期学习',
+                underline: 'decoration-violet-500 dark:decoration-violet-400 decoration-dotted',
+                badge: 'bg-violet-600 dark:bg-violet-700',
+                text: 'text-violet-700 dark:text-violet-300'
+            },
+            custom: {
+                label: '个人词库',
+                advice: '个人标记',
+                underline: 'decoration-rose-500 dark:decoration-rose-400 decoration-dotted',
+                badge: 'bg-rose-600 dark:bg-rose-700',
+                text: 'text-rose-700 dark:text-rose-300'
+            },
+            phrase: {
+                label: '语法与佳句',
+                advice: '结合语境学习',
+                underline: 'decoration-indigo-500 dark:decoration-indigo-400 decoration-dashed',
+                badge: 'bg-indigo-600 dark:bg-indigo-700',
+                text: 'text-indigo-700 dark:text-indigo-300'
+            }
+        };
+
+        const shouldShowVocabType = (type, highlightMode) => {
+            if (highlightMode === 'none') return false;
+            if (highlightMode === 'all') return true;
+            if (highlightMode === 'daily') return type === 'core' || type === 'scenario';
+            return highlightMode === type;
+        };'''
+          text, meta_count = meta_pattern.subn(new_meta, text, count=1)
+          if meta_count != 1:
+              raise SystemExit(f'IELTS vocabulary meta: expected one match, found {meta_count}')
+
+          old_word_payload = '''                            const { translation, type, word: lemma, category, memo } = match;
+                            const meta = VOCAB_TYPE_META[type] || VOCAB_TYPE_META.custom;'''
+          new_word_payload = '''                            const { translation, type, word: lemma, category, memo, learningAdvice, ieltsReason, overlapTags, redbookCategories, qualityStatus } = match;
+                            const meta = VOCAB_TYPE_META[type] || VOCAB_TYPE_META.custom;'''
+          text = replace_once(text, old_word_payload, new_word_payload, 'word metadata destructuring')
+          text = replace_once(
+              text,
+              "onWordClick({ word: part, lemma, translation, type, category, memo, note: memo });",
+              "onWordClick({ word: part, lemma, translation, type, category, memo, note: memo, learningAdvice, ieltsReason, overlapTags, redbookCategories, qualityStatus });",
+              'word click metadata'
+          )
+
+          old_phrase_object = '''                                      : {
+                                          trans: entry.translation || entry.zh || '',
+                                          note: entry.memo || '',
+                                          category: entry.category || '',
+                                          type: dict.type
+                                      };'''
+          new_phrase_object = '''                                      : {
+                                          trans: entry.translation || entry.zh || '',
+                                          note: entry.memo || '',
+                                          category: entry.category || '',
+                                          type: entry.ieltsLevel || dict.type,
+                                          learningAdvice: entry.learningAdvice || '',
+                                          ieltsReason: entry.ieltsReason || '',
+                                          overlapTags: Array.isArray(entry.overlapTags) ? entry.overlapTags : [],
+                                          redbookCategories: Array.isArray(entry.redbookCategories) ? entry.redbookCategories : [],
+                                          qualityStatus: entry.qualityStatus || ''
+                                      };'''
+          text = replace_once(text, old_phrase_object, new_phrase_object, 'phrase metadata propagation')
+
+          old_phrase_active = '''                                        category: phraseData.category,
+                                        type: phraseType'''
+          new_phrase_active = '''                                        category: phraseData.category,
+                                        type: phraseType,
+                                        learningAdvice: phraseData.learningAdvice,
+                                        ieltsReason: phraseData.ieltsReason,
+                                        overlapTags: phraseData.overlapTags,
+                                        redbookCategories: phraseData.redbookCategories,
+                                        qualityStatus: phraseData.qualityStatus'''
+          text = replace_once(text, old_phrase_active, new_phrase_active, 'phrase click metadata')
+
+          category_line = "                            {activeNote.category && <div className=\"mb-2 text-[11px] text-gray-500 dark:text-gray-400\">{activeNote.category}</div>}"
+          detail_block = category_line + '''
+                            {(activeNote.learningAdvice || (VOCAB_TYPE_META[activeNote.type] || {}).advice) && (
+                                <div className="mb-2 flex items-center gap-2 text-[11px]">
+                                    <span className="font-semibold text-gray-500 dark:text-gray-400">学习建议</span>
+                                    <span className="px-2 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{activeNote.learningAdvice || (VOCAB_TYPE_META[activeNote.type] || {}).advice}</span>
+                                </div>
+                            )}
+                            {activeNote.ieltsReason && <div className="mb-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">{activeNote.ieltsReason}</div>}
+                            {Array.isArray(activeNote.overlapTags) && activeNote.overlapTags.length > 0 && (
+                                <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-1">重合标签</span>
+                                    {activeNote.overlapTags.map(tag => <span key={tag} className="px-1.5 py-0.5 text-[10px] rounded-sm border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-300 bg-gray-50 dark:bg-gray-900">{tag}</span>)}
+                                </div>
+                            )}
+                            {activeNote.qualityStatus === 'review' && <div className="mb-2 text-[10px] text-amber-700 dark:text-amber-300">该词来自 OCR 或程序补充释义，建议结合语境复核。</div>}'''
+          text = replace_once(text, category_line, detail_block, 'active vocabulary learning details')
+
+          text = replace_once(
+              text,
+              "            const [highlightMode, setHighlightMode] = useState('exam');",
+              "            const [highlightMode, setHighlightMode] = useState('daily');",
+              'default IELTS highlight mode'
+          )
+
+          text = replace_once(
+              text,
+              "            const [extraDict, setExtraDict] = useState({});",
+              "            const [extraDict, setExtraDict] = useState({});\n            const [ieltsDict, setIeltsDict] = useState({});",
+              'IELTS dictionary state'
+          )
+
+          old_active_dicts = '''            const activeDicts = useMemo(() => [
+                { data: extraDict, type: 'extra' },
+                { data: requiredDict, type: 'required' },
+                { data: basicDict, type: 'basic' },
+                { data: customDict, type: 'custom' }
+            ], [extraDict, requiredDict, basicDict, customDict]);'''
+          new_active_dicts = '''            const activeDicts = useMemo(() => [
+                { data: ieltsDict, type: 'extended' },
+                { data: customDict, type: 'custom' }
+            ], [ieltsDict, customDict]);'''
+          text = replace_once(text, old_active_dicts, new_active_dicts, 'IELTS active dictionary priority')
+
+          old_loader = '''                Promise.all([
+                    fetchVocabularyPack(BASIC_DICT_URL),
+                    fetchVocabularyPack(REQUIRED_DICT_URL),
+                    fetchVocabularyPack(EXTRA_DICT_URL)
+                ]).then(([basic, required, extra]) => {
+                    setBasicDict(basic);
+                    setRequiredDict(required);
+                    setExtraDict(extra);
+                }).catch(error => {'''
+          new_loader = '''                Promise.all([
+                    fetchVocabularyPack(BASIC_DICT_URL),
+                    fetchVocabularyPack(REQUIRED_DICT_URL),
+                    fetchVocabularyPack(EXTRA_DICT_URL),
+                    fetchIELTSVocabularyPack(IELTS_DICT_URL)
+                ]).then(([basic, required, extra, ielts]) => {
+                    setBasicDict(basic);
+                    setRequiredDict(required);
+                    setExtraDict(extra);
+                    setIeltsDict(ielts);
+                }).catch(error => {'''
+          text = replace_once(text, old_loader, new_loader, 'IELTS vocabulary loader')
+          text = text.replace('Error loading classified vocabulary packs:', 'Error loading IELTS vocabulary packs:', 1)
+          text = text.replace('分级词库加载失败，请刷新后重试', '雅思分层词库加载失败，请刷新后重试', 1)
+
+          old_options = '''                                                <option value="exam">必考＋超纲</option>
+                                                <option value="all">全部词汇</option>
+                                                <option value="basic">基础词</option>
+                                                <option value="required">必考词</option>
+                                                <option value="extra">超纲词</option>
+                                                <option value="none">关闭标注</option>'''
+          new_options = '''                                                <option value="daily">核心＋场景</option>
+                                                <option value="all">全部雅思词</option>
+                                                <option value="core">雅思核心词</option>
+                                                <option value="scenario">雅思场景词</option>
+                                                <option value="overlap">基础重合词</option>
+                                                <option value="extended">雅思扩展词</option>
+                                                <option value="none">关闭标注</option>'''
+          text = replace_once(text, old_options, new_options, 'IELTS filter options')
+          text = text.replace('w-[112px]', 'w-[124px]', 1)
+
+          INDEX.write_text(text, encoding='utf-8')
+
+          decoded = json.loads(OUTPUT_JSON.read_text(encoding='utf-8'))
+          if len(decoded) != 1992:
+              raise SystemExit(f'IELTS vocabulary count mismatch: {len(decoded)}')
+          required_markers = [
+              'const IELTS_DICT_URL',
+              "label: '雅思核心词'",
+              "label: '雅思场景词'",
+              "label: '雅思基础重合词'",
+              "label: '雅思扩展词'",
+              '<option value="daily">核心＋场景</option>',
+              'activeNote.overlapTags',
+              'setIeltsDict(ielts)',
+          ]
+          for marker in required_markers:
+              if marker not in text:
+                  raise SystemExit(f'missing reader marker: {marker}')
+          PY
+
+      - name: Validate generated resources
+        shell: bash
+        run: |
+          python -m json.tool public-resources/ielts-vocabulary/ielts-vocabulary-4-level.json > /dev/null
+          grep -q '雅思核心词' index.html
+          grep -q '雅思场景词' index.html
+          grep -q '雅思基础重合词' index.html
+          grep -q '雅思扩展词' index.html
+          grep -q 'IELTS_DICT_URL' index.html
+          git diff --check
+
+      - name: Commit generated IELTS vocabulary
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-ielts-four-level-vocabulary.yml
+          rm -f tools/ielts-vocabulary-4-level.payload.b64
+          rmdir .github/workflows 2>/dev/null || true
+          rmdir .github 2>/dev/null || true
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add four-level IELTS vocabulary interaction'
+          git push origin HEAD:feat/ielts-four-level-vocabulary
