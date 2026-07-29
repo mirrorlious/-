@@ -54,7 +54,7 @@ jobs:
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
           script = script.replace(
               "text = INDEX.read_text(encoding='utf-8-sig')",
-              "text = INDEX.read_text(encoding='utf-8-sig').replace('\\r\\n', '\\n')"
+              "text = INDEX.read_text(encoding='utf-8-sig')\ntext = text.replace(chr(13) + chr(10), chr(10)).replace(chr(13), chr(10))"
           )
           Path('/tmp/build-ielts-vocabulary.sh').write_text(script, encoding='utf-8')
           PY
