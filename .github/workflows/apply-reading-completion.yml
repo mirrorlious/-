@@ -1,0 +1,252 @@
+name: Apply reading completion status
+
+on:
+  push:
+    branches:
+      - feat/pwa-mobile-app
+
+permissions:
+  contents: write
+
+jobs:
+  patch-reading-completion:
+    if: contains(github.event.head_commit.message, '[run-reading-completion]')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PWA branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/pwa-mobile-app
+          fetch-depth: 0
+
+      - name: Apply reading completion UI and persistence
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/App.jsx')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected exactly 1 match, got {count}')
+              text = text.replace(old, new, 1)
+              print(f'{label}: applied')
+
+          save_history_anchor = '''    const saveHistoryToCloud = async (record) => {
+          const normalizedRecord = { ...record, createdAt: record.createdAt || Date.now() };
+          setHistory(prevHistory => {
+              const nextHistory = [normalizedRecord, ...prevHistory.filter(item => item.id !== normalizedRecord.id)]
+                  .sort((a, b) => b.createdAt - a.createdAt);
+              persistLocalState({ history: nextHistory });
+              return nextHistory;
+          });
+
+          if (!user || !dbInstance || !window.firebaseImports) return;
+          const { doc, setDoc } = window.firebaseImports;
+          const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+          try { await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'history', normalizedRecord.id), normalizedRecord, { merge: true }); } catch(e) {}
+      };
+'''
+
+          completion_helpers = save_history_anchor + '''
+      const formatReadingCompletionDate = (value) => {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return '';
+          const year = String(date.getFullYear()).slice(-2);
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const day = String(date.getDate()).padStart(2, '0');
+          return `${year}/${month}/${day}`;
+      };
+
+      const toggleReadingCompletion = async (recordId, event) => {
+          event?.stopPropagation();
+          if (!recordId) return;
+          const record = history.find(item => item.id === recordId);
+          if (!record) {
+              window.showToast('未找到这篇文章的阅读记录', 'warning');
+              return;
+          }
+
+          const completedAt = record.completedAt ? null : Date.now();
+          const updatedRecord = { ...record, completedAt };
+          await saveHistoryToCloud(updatedRecord);
+
+          try {
+              const bundleKey = record.bundleKey || getArticleBundleKey(recordId);
+              const bundle = await readReaderStore('article-bundles', bundleKey);
+              if (bundle) {
+                  await writeReaderStore('article-bundles', {
+                      ...bundle,
+                      metadata: {
+                          ...(bundle.metadata || {}),
+                          completedAt,
+                          updatedAt: Date.now()
+                      }
+                  });
+              }
+          } catch (error) {
+              console.warn('Reading completion bundle update failed:', error);
+          }
+
+          window.showToast(completedAt ? '已标记为完成阅读' : '已取消完成阅读', 'success');
+      };
+'''
+          replace_once(save_history_anchor, completion_helpers, 'completion helpers')
+
+          replace_once(
+              '''                promptVersion: CACHE_PROMPT_VERSION,
+                  updatedAt: Date.now()
+''',
+              '''                promptVersion: CACHE_PROMPT_VERSION,
+                  completedAt: existing?.metadata?.completedAt || record?.completedAt || null,
+                  updatedAt: Date.now()
+''',
+              'bundle completion metadata'
+          )
+
+          replace_once(
+              '''                hasFullQuiz: Boolean(bundle.results?.fullQuizData),
+                  updatedAt: Date.now()
+''',
+              '''                hasFullQuiz: Boolean(bundle.results?.fullQuizData),
+                  completedAt: bundle.metadata?.completedAt || existing.completedAt || null,
+                  updatedAt: Date.now()
+''',
+              'history bundle completion metadata'
+          )
+
+          replace_once(
+              '''                promptVersion: CACHE_PROMPT_VERSION,
+                  updatedAt: Date.now()
+              }
+          };
+''',
+              '''                promptVersion: CACHE_PROMPT_VERSION,
+                  completedAt: record.completedAt || base.metadata?.completedAt || null,
+                  updatedAt: Date.now()
+              }
+          };
+''',
+              'current bundle completion metadata'
+          )
+
+          replace_once(
+              '''                hasFullMap: Boolean(bundle.results.fullMapData),
+                  hasFullQuiz: Boolean(bundle.results.fullQuizData)
+              });
+''',
+              '''                hasFullMap: Boolean(bundle.results.fullMapData),
+                  hasFullQuiz: Boolean(bundle.results.fullQuizData),
+                  completedAt: bundle.metadata?.completedAt || null
+              });
+''',
+              'markdown completion restore'
+          )
+
+          replace_once(
+              '''    const currentArticleTitle = currentHistoryId
+          ? (history.find(item => item.id === currentHistoryId)?.title || inferArticleTitleFromText(inputText))
+          : inferArticleTitleFromText(inputText);
+''',
+              '''    const currentHistoryRecord = currentHistoryId
+          ? history.find(item => item.id === currentHistoryId)
+          : null;
+      const currentArticleCompletedAt = currentHistoryRecord?.completedAt || null;
+      const currentArticleTitle = currentHistoryId
+          ? (currentHistoryRecord?.title || inferArticleTitleFromText(inputText))
+          : inferArticleTitleFromText(inputText);
+''',
+              'current completion state'
+          )
+
+          replace_once(
+              '''                                <div ref={fullTextMenuContainerRef} className="relative shrink-0">
+''',
+              '''                                <button
+                                      type="button"
+                                      onClick={(event) => toggleReadingCompletion(currentHistoryId, event)}
+                                      disabled={!currentHistoryId}
+                                      className={`min-h-[36px] shrink-0 px-3 inline-flex items-center gap-1.5 rounded-sm border text-[12px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${currentArticleCompletedAt ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-emerald-700 dark:hover:text-emerald-300'}`}
+                                      aria-pressed={Boolean(currentArticleCompletedAt)}
+                                      title={currentArticleCompletedAt ? `已完成于 ${formatReadingCompletionDate(currentArticleCompletedAt)}，点击取消` : '标记为完成阅读'}
+                                  >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" d="M5 12.5l4 4L19 6.5"></path></svg>
+                                      <span>{currentArticleCompletedAt ? '已完成' : '完成阅读'}</span>
+                                  </button>
+
+                                  <div ref={fullTextMenuContainerRef} className="relative shrink-0">
+''',
+              'reader completion button'
+          )
+
+          replace_once(
+              '''                                                <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{record.title || window.getExcerpt(record.text || record.preview || '')}</div>
+                                                  <div className="mt-3 flex flex-wrap gap-2 items-center text-[10px] font-medium">
+''',
+              '''                                                <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{record.title || window.getExcerpt(record.text || record.preview || '')}</div>
+                                                  {record.completedAt && (
+                                                      <div className={`mt-2 text-[10.5px] font-medium tracking-wide ${currentHistoryId === record.id ? 'text-emerald-200' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                                                          ✓ 已完成阅读 {formatReadingCompletionDate(record.completedAt)}
+                                                      </div>
+                                                  )}
+                                                  <div className="mt-3 flex flex-wrap gap-2 items-center text-[10px] font-medium">
+''',
+              'library completion label'
+          )
+
+          replace_once(
+              '''                                                    {record.hasFullQuiz && <span className="px-2 py-0.5 rounded-sm border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">练习已缓存</span>}
+                                                  </div>
+''',
+              '''                                                    {record.hasFullQuiz && <span className="px-2 py-0.5 rounded-sm border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">练习已缓存</span>}
+                                                      <button
+                                                          type="button"
+                                                          onClick={(event) => toggleReadingCompletion(record.id, event)}
+                                                          className={`ml-auto min-h-[28px] px-2.5 rounded-sm border text-[10px] font-medium transition-colors ${record.completedAt ? (currentHistoryId === record.id ? 'border-emerald-300/60 text-emerald-200 hover:bg-white/10' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300') : (currentHistoryId === record.id ? 'border-white/30 text-white hover:bg-white/10' : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300')}`}
+                                                          aria-label={`${record.completedAt ? '取消完成' : '完成阅读'}：${record.title || '未命名文章'}`}
+                                                      >
+                                                          {record.completedAt ? '取消完成' : '完成阅读'}
+                                                      </button>
+                                                  </div>
+''',
+              'library completion button'
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Run accessibility lint
+        run: npm run lint:a11y
+
+      - name: Build production app
+        run: npm run build
+
+      - name: Commit completion feature
+        shell: bash
+        run: |
+          if git diff --quiet -- src/App.jsx; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.jsx
+          git commit -m "feat: add reading completion status and date"
+          git push origin feat/pwa-mobile-app
