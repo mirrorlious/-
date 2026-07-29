@@ -285,14 +285,11 @@ flowchart LR
 
 ## 🚀 快速开始
 
-### 直接打开
-
-双击根目录的 [`index.html`](./index.html)。
-
-### 使用静态服务器
+### 本地开发
 
 ```bash
-python -m http.server 5173
+npm ci
+npm run dev
 ```
 
 浏览器访问：
@@ -300,6 +297,15 @@ python -m http.server 5173
 ```text
 http://localhost:5173
 ```
+
+生产构建和完整回归：
+
+```bash
+npm run build
+npm test
+```
+
+`npm run build` 会把可部署产物写入 `dist/`。根目录 `index.html` 是 Vite 源码入口，不能再通过双击文件或普通静态服务器直接运行。
 
 首次使用 AI 功能：
 
@@ -331,34 +337,59 @@ http://localhost:5173
 ## 🧱 技术形态
 
 ```text
-index.html
-├── React 18 CDN
-├── Babel Standalone
-├── Tailwind CDN
-├── PDF.js
+index.html → Vite → dist/
+├── src/App.jsx（状态与页面编排）
+├── src/main.jsx（React / Firebase / PDF.js 本地入口）
+├── src/core/（词汇、配置、持久化、PDF 文本、Markdown 数据包）
+├── src/services/（AI 调用与缓存编排）
+├── src/components/（段落、练习、PDF 阅读器、思维导图）
+├── src/styles/app.css（Tailwind + 应用样式）
 ├── localStorage + IndexedDB
 ├── Google Gemini 原生协议
 ├── OpenAI 兼容协议
 └── 可选 Firebase
 ```
 
-- 单页静态应用；
-- 无需打包即可运行；
+- Vite 构建的单页静态应用；
+- React、Tailwind、Firebase 与 PDF.js 均从锁定的本地 npm 依赖构建；
+- 生产页面不使用浏览器端 Babel、开发版 React 或 Tailwind Play CDN；
+- 关键弹层具备焦点圈定、Escape 关闭和焦点返回，菜单支持方向键/Home/End，划线词与阅读卡片支持键盘触发；
+- 页面提供跳到正文和学习结果的快捷入口；高密度划线词采用正文单一 Tab 入口与方向键漫游，避免逐词反复 Tab；
+- AI、PDF、OCR、导入导出和批量任务通过统一通知中心向读屏软件播报状态，错误消息仅按纯文本渲染；
+- 支持减弱动效、Windows 强制颜色、320 CSS 像素窄屏回流，以及学习面板标准 tabs 键盘模型；
+- `npm test` 包含无障碍 ESLint、axe WCAG 扫描、键盘/焦点回归、生产构建和系统 Edge E2E；
 - 可部署到 GitHub Pages；
-- 主要可维护源码仍集中在 `index.html`；
+- 业务逻辑按 core / services / components 分层，`src/App.jsx` 保留应用级状态与页面编排；
 - 项目开发规则见 [`AGENTS.md`](./AGENTS.md)；
 - 任务记录规范见 [`TASK_LOGS/README.md`](./TASK_LOGS/README.md)。
+
+### 无障碍操作摘要
+
+- `Tab`：进入工具栏、正文、学习结果及其他页面区域；
+- 正文获得焦点后使用方向键浏览划线词，`Enter` 或空格打开词卡，`Escape` 关闭并返回原词；
+- 菜单使用方向键、`Home`、`End` 导航，`Escape` 关闭并返回触发按钮；
+- 学习结果标签使用左右方向键切换；
+- 弹层内 `Tab`/`Shift+Tab` 循环，`Escape` 关闭；
+- 沉浸模式中仅保留眼睛按钮，也可以按 `Escape` 退出。
+
+开发时可单独运行：
+
+```bash
+npm run lint:a11y
+npm run test:unit
+npm run test:e2e
+```
 
 ---
 
 ## 🌐 部署到 GitHub Pages
 
-1. 将代码推送到 GitHub；
-2. 打开仓库 **Settings → Pages**；
-3. 选择部署分支和根目录；
-4. 保存后等待静态页面发布。
+1. 执行 `npm ci && npm run build`；
+2. 将生成的 `dist/` 作为站点目录；
+3. 在 GitHub Actions 或其他部署流程中发布该目录；
+4. 等待静态页面发布并运行浏览器冒烟测试。
 
-根目录已有 `index.html`，无需额外构建步骤。
+不要直接发布仓库根目录；生产入口和静态词库都由构建流程写入 `dist/`。
 
 <details>
 <summary><strong>部署后打不开 AI 功能？</strong></summary>

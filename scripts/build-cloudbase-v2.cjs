@@ -31,20 +31,9 @@ function copyTree(source, target) {
   fs.copyFileSync(source, target);
 }
 
-fs.rmSync(dist, {
-  recursive: true,
-  force: true
-});
-
-fs.mkdirSync(dist, {
-  recursive: true
-});
-
-console.log("Copying index.html");
-copyTree(
-  path.join(root, "index.html"),
-  path.join(dist, "index.html")
-);
+if (!fs.existsSync(path.join(dist, "index.html"))) {
+  throw new Error("Vite output is missing. Run this script through npm run build.");
+}
 
 console.log("Copying public-resources");
 copyTree(
@@ -99,4 +88,4 @@ if (vocabFiles.length < 3) {
 }
 
 console.log("Vocabulary JSON files:", vocabFiles.length);
-console.log("CloudBase build completed.");
+console.log("Static resources added to the Vite production build.");
