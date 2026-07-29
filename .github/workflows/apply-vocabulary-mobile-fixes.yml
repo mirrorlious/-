@@ -1,0 +1,273 @@
+name: Apply vocabulary and mobile reader fixes
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.head.ref == 'ci/vocabulary-source-submenu'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Patch vocabulary menus and mobile reader
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new, label):
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected 1 match, found {count}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          app = Path('src/App.jsx')
+          paragraph = Path('src/components/Paragraph.jsx')
+
+          replace_once(
+              app,
+              "    const [highlightMode, setHighlightMode] = useState('daily');",
+              "    const [vocabularySource, setVocabularySource] = useState('all');\n    const [highlightMode, setHighlightMode] = useState('all');",
+              'vocabulary source state'
+          )
+
+          text = app.read_text(encoding='utf-8')
+          active_pattern = re.compile(
+              r"    const activeDicts = useMemo\(\(\) => \[\s*"
+              r"\{ data: ieltsDict, type: 'extended' \},\s*"
+              r"\{ data: customDict, type: 'custom' \}\s*"
+              r"\], \[ieltsDict, customDict\]\);",
+              re.S,
+          )
+          active_replacement = """    const activeDicts = useMemo(() => {
+              const ieltsSource = { data: ieltsDict, type: 'extended' };
+              const kaoyanSources = [
+                  { data: extraDict, type: 'extra' },
+                  { data: requiredDict, type: 'required' },
+                  { data: basicDict, type: 'basic' }
+              ];
+              const customSource = { data: customDict, type: 'custom' };
+
+              if (vocabularySource === 'ielts') return [ieltsSource, customSource];
+              if (vocabularySource === 'kaoyan') return [...kaoyanSources, customSource];
+              return [ieltsSource, ...kaoyanSources, customSource];
+          }, [vocabularySource, ieltsDict, extraDict, requiredDict, basicDict, customDict]);
+
+          const handleVocabularySourceChange = (nextSource) => {
+              setVocabularySource(nextSource);
+              if (nextSource === 'ielts') setHighlightMode('daily');
+              else if (nextSource === 'kaoyan') setHighlightMode('exam');
+              else setHighlightMode('all');
+          };"""
+          text, count = active_pattern.subn(active_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'active vocabulary sources: expected 1 match, found {count}')
+
+          old_sync = "const syncLearningPanelWidth = () => setIsLearningPanelWide(mediaQuery.matches);"
+          new_sync = """const syncLearningPanelWidth = () => {
+              const isWide = mediaQuery.matches;
+              setIsLearningPanelWide(isWide);
+              if (!isWide) {
+                  setLayoutMode('standard');
+                  setArticleColumnMode('single');
+                  setRightPanelOpen(false);
+              }
+          };"""
+          if text.count(old_sync) != 1:
+              raise SystemExit(f'mobile layout sync: expected 1 match, found {text.count(old_sync)}')
+          text = text.replace(old_sync, new_sync, 1)
+
+          text = text.replace(
+              "console.error('Error loading IELTS vocabulary packs:', error);\n            window.showToast('雅思分层词库加载失败，请刷新后重试', 'error');",
+              "console.error('Error loading vocabulary packs:', error);\n            window.showToast('词汇库加载失败，请刷新后重试', 'error');",
+              1,
+          )
+
+          selector_pattern = re.compile(
+              r"\{readingMode === 'intensive' && \(\s*"
+              r"<select value=\{highlightMode\} onChange=\{\(event\) => setHighlightMode\(event\.target\.value\)\} aria-label=\"词汇高亮范围\" title=\"词汇高亮范围\" className=\"[^\"]+\">"
+              r"[\s\S]*?</select>\s*\)\}",
+              re.S,
+          )
+          selector_replacement = '''{readingMode === 'intensive' && (
+                                    <div className="flex items-center gap-1 shrink-0" role="group" aria-label="词汇标注设置">
+                                        <select value={vocabularySource} onChange={(event) => handleVocabularySourceChange(event.target.value)} aria-label="词汇库来源" title="词汇库来源" className="h-9 w-[72px] sm:w-[82px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                            <option value="all">全部</option>
+                                            <option value="ielts">雅思</option>
+                                            <option value="kaoyan">考研</option>
+                                        </select>
+
+                                        {vocabularySource === 'all' ? (
+                                            <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="全部词汇显示范围" title="全部词汇显示范围" className="h-9 w-[104px] sm:w-[116px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                                <option value="all">全部词汇</option>
+                                                <option value="none">关闭标注</option>
+                                            </select>
+                                        ) : vocabularySource === 'ielts' ? (
+                                            <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="雅思词汇显示范围" title="雅思词汇显示范围" className="h-9 w-[112px] sm:w-[126px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                                <option value="daily">核心＋场景</option>
+                                                <option value="all">全部雅思词</option>
+                                                <option value="core">雅思核心词</option>
+                                                <option value="scenario">雅思场景词</option>
+                                                <option value="overlap">基础重合词</option>
+                                                <option value="extended">雅思扩展词</option>
+                                                <option value="none">关闭标注</option>
+                                            </select>
+                                        ) : (
+                                            <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="考研词汇显示范围" title="考研词汇显示范围" className="h-9 w-[112px] sm:w-[126px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                                <option value="exam">必考＋超纲</option>
+                                                <option value="all">全部考研词</option>
+                                                <option value="basic">考研基础词</option>
+                                                <option value="required">考研必考词</option>
+                                                <option value="extra">考研超纲词</option>
+                                                <option value="none">关闭标注</option>
+                                            </select>
+                                        )}
+                                    </div>
+                                )}'''
+          text, count = selector_pattern.subn(selector_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'vocabulary submenu: expected 1 match, found {count}')
+
+          split_old = """<button type="button" onClick={() => setLayoutMode('split')} className={readerToolbarIconClass(layoutMode === 'split')} aria-pressed={layoutMode === 'split'} aria-label="正文与侧栏分栏" title="正文与侧栏分栏">"""
+          split_new = """<button type="button" onClick={() => setLayoutMode('split')} disabled={!isLearningPanelWide} className={`${readerToolbarIconClass(layoutMode === 'split')} disabled:opacity-35 disabled:cursor-not-allowed`} aria-pressed={layoutMode === 'split'} aria-label="正文与侧栏分栏" title={!isLearningPanelWide ? '手机端不支持分栏布局' : '正文与侧栏分栏'}>"""
+          if text.count(split_old) != 1:
+              raise SystemExit(f'split button: expected 1 match, found {text.count(split_old)}')
+          text = text.replace(split_old, split_new, 1)
+
+          columns_old = """<button type="button" onClick={() => setArticleColumnMode(previous => previous === 'double' ? 'single' : 'double')} className={readerToolbarIconClass(articleColumnMode === 'double')} aria-pressed={articleColumnMode === 'double'} aria-label={articleColumnMode === 'double' ? '切换为文章单栏' : '切换为文章双栏'} title={articleColumnMode === 'double' ? '文章双栏已开启' : '文章单栏'}>"""
+          columns_new = """<button type="button" onClick={() => setArticleColumnMode(previous => previous === 'double' ? 'single' : 'double')} disabled={!isLearningPanelWide} className={`${readerToolbarIconClass(articleColumnMode === 'double')} disabled:opacity-35 disabled:cursor-not-allowed`} aria-pressed={articleColumnMode === 'double'} aria-label={articleColumnMode === 'double' ? '切换为文章单栏' : '切换为文章双栏'} title={!isLearningPanelWide ? '手机端固定为文章单栏' : articleColumnMode === 'double' ? '文章双栏已开启' : '文章单栏'}>"""
+          if text.count(columns_old) != 1:
+              raise SystemExit(f'columns button: expected 1 match, found {text.count(columns_old)}')
+          text = text.replace(columns_old, columns_new, 1)
+
+          panel_old = """<button type="button" onClick={() => setRightPanelOpen(previous => !previous)} disabled={layoutMode !== 'split'} className={readerToolbarIconClass(layoutMode === 'split' && rightPanelOpen)} aria-pressed={layoutMode === 'split' && rightPanelOpen} aria-label={rightPanelOpen ? '隐藏学习侧栏' : '显示学习侧栏'} title={layoutMode !== 'split' ? '请先切换到分栏布局' : rightPanelOpen ? '隐藏学习侧栏' : '显示学习侧栏'}>"""
+          panel_new = """<button type="button" onClick={() => setRightPanelOpen(previous => !previous)} disabled={!isLearningPanelWide || layoutMode !== 'split'} className={`${readerToolbarIconClass(layoutMode === 'split' && rightPanelOpen)} disabled:opacity-35 disabled:cursor-not-allowed`} aria-pressed={layoutMode === 'split' && rightPanelOpen} aria-label={rightPanelOpen ? '隐藏学习侧栏' : '显示学习侧栏'} title={!isLearningPanelWide ? '手机端不启用学习侧栏' : layoutMode !== 'split' ? '请先切换到分栏布局' : rightPanelOpen ? '隐藏学习侧栏' : '显示学习侧栏'}>"""
+          if text.count(panel_old) != 1:
+              raise SystemExit(f'panel button: expected 1 match, found {text.count(panel_old)}')
+          text = text.replace(panel_old, panel_new, 1)
+
+          prop_old = """                                        inlineResultsEnabled={!isLearningPanelDocked}
+                                          onPersistParagraphResult={handlePersistParagraphResult}"""
+          prop_new = """                                        inlineResultsEnabled={!isLearningPanelDocked}
+                                          compactActionsEnabled={!isLearningPanelWide}
+                                          onPersistParagraphResult={handlePersistParagraphResult}"""
+          if text.count(prop_old) != 1:
+              raise SystemExit(f'compact action prop: expected 1 match, found {text.count(prop_old)}')
+          app.write_text(text.replace(prop_old, prop_new, 1), encoding='utf-8')
+
+          text = paragraph.read_text(encoding='utf-8')
+          signature_old = "inlineResultsEnabled = true, onPersistParagraphResult"
+          signature_new = "inlineResultsEnabled = true, compactActionsEnabled = false, onPersistParagraphResult"
+          if text.count(signature_old) != 1:
+              raise SystemExit(f'Paragraph compact prop: expected 1 match, found {text.count(signature_old)}')
+          text = text.replace(signature_old, signature_new, 1)
+
+          marker = """    custom: {
+                  label: '个人词库', advice: '个人标记',
+          """
+          kaoyan_meta = """    basic: {
+                  label: '考研基础词', advice: '基础掌握',
+                  underline: 'decoration-green-600 dark:decoration-green-400',
+                  badge: 'bg-green-600 dark:bg-green-700', text: 'text-green-700 dark:text-green-300'
+              },
+              required: {
+                  label: '考研必考词', advice: '重点掌握',
+                  underline: 'decoration-blue-700 dark:decoration-blue-400',
+                  badge: 'bg-blue-700 dark:bg-blue-700', text: 'text-blue-700 dark:text-blue-300'
+              },
+              extra: {
+                  label: '考研超纲词', advice: '拓展掌握',
+                  underline: 'decoration-red-600 dark:decoration-red-400',
+                  badge: 'bg-red-600 dark:bg-red-700', text: 'text-red-700 dark:text-red-300'
+              },
+              custom: {
+                  label: '个人词库', advice: '个人标记',
+          """
+          if text.count(marker) != 1:
+              raise SystemExit(f'kaoyan metadata marker: expected 1 match, found {text.count(marker)}')
+          text = text.replace(marker, kaoyan_meta, 1)
+
+          filter_old = """    if (highlightMode === 'daily') return type === 'core' || type === 'scenario';
+              return highlightMode === type;"""
+          filter_new = """    if (highlightMode === 'daily') return type === 'core' || type === 'scenario';
+              if (highlightMode === 'exam') return type === 'required' || type === 'extra';
+              return highlightMode === type;"""
+          if text.count(filter_old) != 1:
+              raise SystemExit(f'kaoyan filter: expected 1 match, found {text.count(filter_old)}')
+          text = text.replace(filter_old, filter_new, 1)
+
+          quick_marker = """            </div>
+
+              {annotations.length > 0 && ("""
+          quick_block = """            </div>
+
+              {compactActionsEnabled && (
+                  <div className="mt-2 mb-3 flex items-center gap-2" data-reader-mobile-actions="true">
+                      <button
+                          type="button"
+                          onClick={handleToggleTrans}
+                          disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow}
+                          aria-expanded={showTranslation}
+                          className="min-h-[38px] px-3 inline-flex items-center gap-2 rounded-sm border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 text-[12px] font-medium text-sky-700 dark:text-sky-300 disabled:opacity-50"
+                      >
+                          {(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? '翻译中…' : showTranslation ? '收起翻译' : '翻译本段'}
+                          {finalTranslationToShow && !showTranslation && <span className="text-[10px] opacity-70">已缓存</span>}
+                      </button>
+                  </div>
+              )}
+
+              {annotations.length > 0 && ("""
+          if text.count(quick_marker) != 1:
+              raise SystemExit(f'mobile translation button marker: expected 1 match, found {text.count(quick_marker)}')
+          paragraph.write_text(text.replace(quick_marker, quick_block, 1), encoding='utf-8')
+          PY
+
+      - name: Validate fixes
+        run: |
+          grep -q "vocabularySource, setVocabularySource.*'all'" src/App.jsx
+          grep -q "value=\"ielts\"" src/App.jsx
+          grep -q "value=\"kaoyan\"" src/App.jsx
+          grep -q "全部雅思词" src/App.jsx
+          grep -q "全部考研词" src/App.jsx
+          grep -q "手机端不支持分栏布局" src/App.jsx
+          grep -q "手机端固定为文章单栏" src/App.jsx
+          grep -q "手机端不启用学习侧栏" src/App.jsx
+          grep -q "compactActionsEnabled={!isLearningPanelWide}" src/App.jsx
+          grep -q "data-reader-mobile-actions" src/components/Paragraph.jsx
+          grep -q "考研基础词" src/components/Paragraph.jsx
+          grep -q "highlightMode === 'exam'" src/components/Paragraph.jsx
+          grep -q "registerPwa" src/main.jsx
+          git diff --check
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Build production app
+        run: npm run build
+
+      - name: Commit and push to main
+        run: |
+          rm -f .github/workflows/apply-vocabulary-source-submenu.yml
+          rm -f .github/workflows/apply-vocabulary-mobile-fixes.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: add vocabulary source menus and mobile paragraph actions'
+          git push origin HEAD:main
