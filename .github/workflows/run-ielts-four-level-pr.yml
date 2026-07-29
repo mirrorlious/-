@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   generate:
-    if: github.event.pull_request.number == 14 && github.event.pull_request.head.ref == 'feat/ielts-four-level-vocabulary'
+    if: github.event.pull_request.number == 16 && github.event.pull_request.head.ref == 'feat/ielts-four-level-vocabulary'
     runs-on: ubuntu-latest
     steps:
       - name: Check out IELTS feature branch
