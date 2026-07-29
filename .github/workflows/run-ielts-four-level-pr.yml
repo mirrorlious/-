@@ -28,6 +28,21 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import base64
+          import gzip
+          import json
+
+          part_paths = [Path(f'tools/ielts-payload-correct.part{i:02d}') for i in range(1, 6)]
+          missing = [str(path) for path in part_paths if not path.exists()]
+          if missing:
+              raise SystemExit(f'Missing corrected IELTS payload chunks: {missing}')
+          payload_text = ''.join(path.read_text(encoding='utf-8').strip() for path in part_paths)
+          if len(payload_text) != 44492 or not payload_text.startswith('H4sI'):
+              raise SystemExit(f'Unexpected corrected IELTS payload: length={len(payload_text)}, prefix={payload_text[:8]}')
+          decoded = json.loads(gzip.decompress(base64.b64decode(payload_text)).decode('utf-8'))
+          if len(decoded) != 1992:
+              raise SystemExit(f'Corrected IELTS payload count mismatch: {len(decoded)}')
+          Path('tools/ielts-vocabulary-4-level.payload.b64').write_text(payload_text, encoding='utf-8')
 
           workflow = Path('.github/workflows/apply-ielts-four-level-vocabulary.yml')
           text = workflow.read_text(encoding='utf-8')
@@ -38,8 +53,19 @@ jobs:
           lines = text[body_start:body_end].splitlines()
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
           script = script.replace(
-              "compressed = base64.b64decode(PAYLOAD.read_text(encoding='utf-8').strip())",
-              "payload_text = PAYLOAD.read_text(encoding='utf-8').strip()\npayload_text += '=' * (-len(payload_text) % 4)\ncompressed = base64.b64decode(payload_text)"
+              "text = replace_once(text, old_entry_return, new_entry_return, 'lemma metadata propagation')",
+              """lemma_pattern = re.compile(
+    r\"[ \\t]+return\\s*\\{\\s*\"
+    r\"translation:\\s*entry\\.translation\\s*\\|\\|\\s*entry\\.zh\\s*\\|\\|\\s*'',\\s*\"
+    r\"category:\\s*entry\\.category\\s*\\|\\|\\s*'',\\s*\"
+    r\"memo:\\s*entry\\.memo\\s*\\|\\|\\s*'',\\s*\"
+    r\"note:\\s*entry\\.memo\\s*\\|\\|\\s*'',\\s*\"
+    r\"type,\\s*word\\s*\\};\",
+    re.S,
+)
+text, lemma_count = lemma_pattern.subn(new_entry_return, text, count=1)
+if lemma_count != 1:
+    raise SystemExit(f'lemma metadata propagation: expected one regex match, found {lemma_count}')"""
           )
           Path('/tmp/build-ielts-vocabulary.sh').write_text(script, encoding='utf-8')
           PY
@@ -69,6 +95,8 @@ jobs:
         run: |
           rm -f .github/workflows/apply-ielts-four-level-vocabulary.yml
           rm -f tools/ielts-vocabulary-4-level.payload.b64
+          rm -f tools/ielts-payload-correct.part*
+          rm -f tools/ielts-build-trigger.txt
           rmdir tools 2>/dev/null || true
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
