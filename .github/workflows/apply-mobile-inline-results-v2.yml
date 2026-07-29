@@ -93,11 +93,12 @@ jobs:
           if text.count('if (e.detail > 1) return;') != 2:
               raise SystemExit('double-click guards were not inserted twice')
 
-          helper_anchor = '''    const runParagraphAction = (handler) => (event) => {
-              handler(event);
-              setIsInteracting(false);
-          };
-          '''
+          helper_pattern = re.compile(
+              r"    const runParagraphAction = \(handler\) => \(event\) => \{\n"
+              r"        handler\(event\);\n"
+              r"        setIsInteracting\(false\);\n"
+              r"    \};"
+          )
           helper_extra = dedent('''
 
           const handleAnnotationOpen = (annotationId, event) => {
@@ -117,9 +118,9 @@ jobs:
               }
           }, [mobileAnnotationBubbleEnabled, activeAnnotationId, annotations]);
           ''')
-          if text.count(helper_anchor) != 1:
-              raise SystemExit(f'helper insertion expected 1 match, found {text.count(helper_anchor)}')
-          text = text.replace(helper_anchor, helper_anchor + helper_extra, 1)
+          text, count = helper_pattern.subn(lambda match: match.group(0) + helper_extra, text, count=1)
+          if count != 1:
+              raise SystemExit(f'helper insertion regex expected 1 match, found {count}')
 
           old_click = 'onClick={(event) => { event.stopPropagation(); onFocusAnnotation?.(primaryAnnotationId); }}'
           old_key = "onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onFocusAnnotation?.(primaryAnnotationId); } }}"
@@ -195,7 +196,7 @@ jobs:
           ! grep -q "data-reader-mobile-actions" src/components/Paragraph.jsx
           grep -q "data-reader-annotation-bubble" src/components/Paragraph.jsx
           grep -q "activeMobileAnnotation.note" src/components/Paragraph.jsx
-          test "$(grep -c "if (e.detail > 1) return" src/components/Paragraph.jsx)" -eq 2
+          test "$(grep -c 'if (e.detail > 1) return' src/components/Paragraph.jsx)" -eq 2
           grep -q "inlineResultsEnabled && showTranslation" src/components/Paragraph.jsx
           grep -q "inlineResultsEnabled && showAnalysis" src/components/Paragraph.jsx
           git diff --check
@@ -210,6 +211,7 @@ jobs:
         run: |
           rm -f .github/workflows/apply-mobile-inline-results.yml
           rm -f .github/workflows/apply-mobile-inline-results-v2.yml
+          rm -f .github/workflows/apply-mobile-inline-results-v3.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
