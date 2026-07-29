@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readingCompletionPlugin } from './scripts/reading-completion-vite-plugin.mjs';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [readingCompletionPlugin(), react()],
   build: {
     rollupOptions: {
       output: {
