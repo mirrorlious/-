@@ -1,0 +1,11 @@
+{
+  "name": "yang-reader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Yang English Reader",
+  "scripts": {
+    "build": "node scripts/build-cloudbase-v2.cjs",
+    "test": "echo \"No tests configured\""
+  },
+  "license": "ISC"
+}

@@ -1,0 +1,328 @@
+name: Apply reader UI first batch
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch-reader-ui:
+    if: contains(github.event.head_commit.message, '[run-ui-first-batch]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout annotation branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+
+      - name: Apply focused UI and annotation patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{label}: expected exactly 1 match, got {count}')
+              text = text.replace(old, new, 1)
+
+          def replace_at_least_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count < 1:
+                  raise RuntimeError(f'{label}: expected at least 1 match')
+              text = text.replace(old, new)
+              print(f'{label}: replaced {count}')
+
+          # 1. Annotation palette and stronger default colors.
+          css_start = text.index('        .reader-annotation-mark {')
+          css_end = text.index('        .reader-context-menu {', css_start)
+          annotation_css = '''        .reader-annotation-mark {
+              --annotation-bg: rgba(217, 119, 6, 0.30);
+              --annotation-border: #92400e;
+              --annotation-active: rgba(217, 119, 6, 0.44);
+              background: var(--annotation-bg);
+              border-bottom: 2px solid var(--annotation-border);
+              color: inherit;
+              border-radius: 2px;
+              padding-inline: 1px;
+              box-decoration-break: clone;
+              -webkit-box-decoration-break: clone;
+              cursor: pointer;
+              transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+          }
+
+          .reader-annotation-mark[data-annotation-color="blue"] {
+              --annotation-bg: rgba(59, 130, 246, 0.22);
+              --annotation-border: #1d4ed8;
+              --annotation-active: rgba(59, 130, 246, 0.34);
+          }
+
+          .reader-annotation-mark[data-annotation-color="green"] {
+              --annotation-bg: rgba(16, 185, 129, 0.22);
+              --annotation-border: #047857;
+              --annotation-active: rgba(16, 185, 129, 0.34);
+          }
+
+          .reader-annotation-mark[data-annotation-color="rose"] {
+              --annotation-bg: rgba(244, 63, 94, 0.20);
+              --annotation-border: #be123c;
+              --annotation-active: rgba(244, 63, 94, 0.32);
+          }
+
+          .reader-annotation-mark[data-annotation-color="violet"] {
+              --annotation-bg: rgba(139, 92, 246, 0.20);
+              --annotation-border: #6d28d9;
+              --annotation-active: rgba(139, 92, 246, 0.32);
+          }
+
+          .reader-annotation-mark:hover,
+          .reader-annotation-mark:focus-visible {
+              background: var(--annotation-active);
+              outline: none;
+          }
+
+          .reader-annotation-mark-active {
+              background: var(--annotation-active);
+              box-shadow: 0 0 0 3px color-mix(in srgb, var(--annotation-border) 18%, transparent);
+          }
+
+          .dark .reader-annotation-mark {
+              filter: saturate(0.9) brightness(0.92);
+          }
+
+          .reader-annotation-card {
+              border-left-width: 4px;
+              border-left-color: #92400e;
+          }
+
+          .reader-annotation-card[data-annotation-color="blue"] { border-left-color: #1d4ed8; }
+          .reader-annotation-card[data-annotation-color="green"] { border-left-color: #047857; }
+          .reader-annotation-card[data-annotation-color="rose"] { border-left-color: #be123c; }
+          .reader-annotation-card[data-annotation-color="violet"] { border-left-color: #6d28d9; }
+
+          .reader-annotation-color-dot {
+              width: 12px;
+              height: 12px;
+              border-radius: 999px;
+              background: #d97706;
+              border: 2px solid rgba(255,255,255,0.9);
+              box-shadow: 0 0 0 1px rgba(148,163,184,0.55);
+          }
+
+          .reader-annotation-color-dot[data-annotation-color="blue"] { background: #3b82f6; }
+          .reader-annotation-color-dot[data-annotation-color="green"] { background: #10b981; }
+          .reader-annotation-color-dot[data-annotation-color="rose"] { background: #f43f5e; }
+          .reader-annotation-color-dot[data-annotation-color="violet"] { background: #8b5cf6; }
+
+'''
+          text = text[:css_start] + annotation_css + text[css_end:]
+
+          constants_marker = "        const LOCAL_STORAGE_KEY = 'yang-reader-state-v1';"
+          annotation_constants = '''        const ANNOTATION_COLOR_OPTIONS = [
+              { id: 'gold', label: '深金黄', hex: '#d97706' },
+              { id: 'blue', label: '蓝色', hex: '#3b82f6' },
+              { id: 'green', label: '绿色', hex: '#10b981' },
+              { id: 'rose', label: '玫红', hex: '#f43f5e' },
+              { id: 'violet', label: '紫色', hex: '#8b5cf6' }
+          ];
+          const DEFAULT_ANNOTATION_COLOR = 'gold';
+'''
+          if constants_marker not in text:
+              raise RuntimeError('annotation constants marker missing')
+          text = text.replace(constants_marker, annotation_constants + constants_marker, 1)
+
+          replace_once(
+              '            const [annotationDraft, setAnnotationDraft] = useState("");\n            const [editingAnnotationId, setEditingAnnotationId] = useState(null);',
+              '            const [annotationDraft, setAnnotationDraft] = useState("");\n            const [annotationColor, setAnnotationColor] = useState(DEFAULT_ANNOTATION_COLOR);\n            const [editingAnnotationId, setEditingAnnotationId] = useState(null);',
+              'annotation color state'
+          )
+
+          replace_once(
+              '                setAnnotationComposer({ anchor: normalizedAnchor });\n                setAnnotationDraft(existingAnnotation?.note || "");\n                setEditingAnnotationId(existingAnnotation?.id || null);',
+              '                setAnnotationComposer({ anchor: normalizedAnchor });\n                setAnnotationDraft(existingAnnotation?.note || "");\n                setAnnotationColor(existingAnnotation?.color || DEFAULT_ANNOTATION_COLOR);\n                setEditingAnnotationId(existingAnnotation?.id || null);',
+              'annotation composer color restore'
+          )
+
+          replace_once(
+              '                            annotations[index] = { ...annotations[index], note, updatedAt: now };',
+              '                            annotations[index] = { ...annotations[index], note, color: annotationColor || DEFAULT_ANNOTATION_COLOR, updatedAt: now };',
+              'annotation edit color save'
+          )
+
+          replace_once(
+              '                            anchor: annotationComposer.anchor,\n                            note,\n                            createdAt: now,',
+              '                            anchor: annotationComposer.anchor,\n                            note,\n                            color: annotationColor || DEFAULT_ANNOTATION_COLOR,\n                            createdAt: now,',
+              'annotation create color save'
+          )
+
+          replace_once(
+              '                setAnnotationDraft("");\n                setEditingAnnotationId(null);\n                window.getSelection()?.removeAllRanges();',
+              '                setAnnotationDraft("");\n                setAnnotationColor(DEFAULT_ANNOTATION_COLOR);\n                setEditingAnnotationId(null);\n                window.getSelection()?.removeAllRanges();',
+              'annotation color reset after save'
+          )
+
+          replace_once(
+              '                                    const primaryAnnotationId = piece.annotationIds[0];\n                                    const isActiveAnnotation = piece.annotationIds.includes(activeAnnotationId);',
+              '                                    const primaryAnnotationId = piece.annotationIds[0];\n                                    const primaryAnnotation = annotations.find(annotation => annotation.id === primaryAnnotationId);\n                                    const primaryAnnotationColor = primaryAnnotation?.color || DEFAULT_ANNOTATION_COLOR;\n                                    const isActiveAnnotation = piece.annotationIds.includes(activeAnnotationId);',
+              'annotation render color lookup'
+          )
+
+          replace_once(
+              '                                            data-annotation-id={primaryAnnotationId}\n                                            className={`reader-annotation-mark ${isActiveAnnotation ? \'reader-annotation-mark-active\' : \'\'}`}',
+              '                                            data-annotation-id={primaryAnnotationId}\n                                            data-annotation-color={primaryAnnotationColor}\n                                            className={`reader-annotation-mark ${isActiveAnnotation ? \'reader-annotation-mark-active\' : \'\'}`}',
+              'annotation render data color'
+          )
+
+          # Add color chooser below annotation text area.
+          replace_once(
+              '                                                                        <textarea autoFocus value={annotationDraft} onChange={(event) => setAnnotationDraft(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === \'Enter\') saveAnnotation(); }} className="mt-3 w-full min-h-[96px] resize-y bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 outline-none focus:border-amber-500" placeholder="写下你的理解、疑问或考试提示…" />\n                                                                        <div className="mt-2 flex justify-end gap-2">',
+              '''                                                                        <textarea autoFocus value={annotationDraft} onChange={(event) => setAnnotationDraft(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') saveAnnotation(); }} className="mt-3 w-full min-h-[96px] resize-y bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-3 outline-none focus:border-amber-500" placeholder="写下你的理解、疑问或考试提示…" />
+                                                                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                                            <span className="mr-1 text-[11px] text-gray-500 dark:text-gray-400">标记颜色</span>
+                                                                            {ANNOTATION_COLOR_OPTIONS.map(option => (
+                                                                                <button
+                                                                                    key={option.id}
+                                                                                    type="button"
+                                                                                    onClick={() => setAnnotationColor(option.id)}
+                                                                                    className={`w-7 h-7 grid place-items-center rounded-full transition-transform ${annotationColor === option.id ? 'scale-110 ring-2 ring-offset-2 ring-sky-300 dark:ring-offset-gray-900' : 'hover:scale-105'}`}
+                                                                                    aria-label={`选择${option.label}`}
+                                                                                    title={option.label}
+                                                                                >
+                                                                                    <span className="reader-annotation-color-dot" data-annotation-color={option.id}></span>
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                        <div className="mt-3 flex justify-end gap-2">''',
+              'annotation color chooser'
+          )
+
+          replace_once(
+              '                                                                            <div key={annotation.id} className={`p-3 border rounded-sm transition-colors ${activeAnnotationId === annotation.id ? \'border-amber-400 bg-amber-50 dark:bg-amber-900/20\' : \'border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/40\'}`}>\n                                                                                <button onClick={() => focusAnnotation(annotation.id)} className="w-full text-left">\n                                                                                    <div className="text-[11px] text-amber-700 dark:text-amber-400 line-clamp-2">“{annotation.anchor.exact}”</div>',
+              '''                                                                            <div key={annotation.id} data-annotation-color={annotation.color || DEFAULT_ANNOTATION_COLOR} className={`reader-annotation-card p-3 border rounded-sm transition-colors ${activeAnnotationId === annotation.id ? 'border-sky-300 bg-sky-50/70 dark:bg-sky-900/20' : 'border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/40'}`}>
+                                                                                <button onClick={() => focusAnnotation(annotation.id)} className="w-full text-left">
+                                                                                    <div className="flex items-start gap-2">
+                                                                                        <span className="reader-annotation-color-dot mt-0.5 shrink-0" data-annotation-color={annotation.color || DEFAULT_ANNOTATION_COLOR}></span>
+                                                                                        <div className="text-[11px] text-slate-600 dark:text-slate-300 line-clamp-2">“{annotation.anchor.exact}”</div>
+                                                                                    </div>''',
+              'annotation card color'
+          )
+
+          replace_at_least_once(
+              'setAnnotationComposer(null); setAnnotationDraft(""); setEditingAnnotationId(null);',
+              'setAnnotationComposer(null); setAnnotationDraft(""); setAnnotationColor(DEFAULT_ANNOTATION_COLOR); setEditingAnnotationId(null);',
+              'annotation cancel color reset'
+          )
+
+          # 2. Header width follows the page width and menu moves to the right.
+          header_start = text.index('                        <header className="bg-white/95')
+          header_end = text.index('                        <main className=', header_start)
+          new_header = '''                        <header className="bg-white/95 dark:bg-gray-900/95 backdrop-blur sticky top-0 z-40 border-b border-gray-200 dark:border-gray-800 transition-colors">
+                            <div className={`${isPdfMode ? 'max-w-[1400px]' : isReadingMode && layoutMode === 'split' ? 'max-w-[1480px]' : isReadingMode && layoutMode === 'focus' ? 'max-w-[1120px]' : 'max-w-[1200px]'} w-full mx-auto h-16 px-3 sm:px-5 flex items-center gap-3`}>
+                                <div className="min-w-0 flex-1">
+                                    <h1 className="truncate text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">杨的外刊阅读器</h1>
+                                </div>
+                                <div className="hidden lg:flex shrink-0 items-center gap-1">
+                                    <div className="mr-2 flex items-center gap-2 text-[11px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                        <span>{corpusCount} 句真题</span><span className="w-px h-3 bg-gray-200 dark:bg-gray-700"></span><span>{Object.keys(hardDict).length} 个生词</span>
+                                    </div>
+                                    <button onClick={() => setIsTypographyModalOpen(true)} className="min-h-[40px] px-3 inline-flex items-center gap-2 rounded-md text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-gray-800 transition-colors">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M7 12h10M10 18h4"></path></svg>排版
+                                    </button>
+                                    <button onClick={handleToggleTheme} className="w-10 h-10 grid place-items-center rounded-md text-gray-600 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-gray-800 transition-colors" aria-label={typographyConfig.theme === 'dark' ? '切换到日间模式' : '切换到夜间模式'}>
+                                        {typographyConfig.theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36l-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0l-1.42-1.42M7.06 7.06L5.64 5.64M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.35 15.35A9 9 0 018.65 3.65a9 9 0 1011.7 11.7z"></path></svg>}
+                                    </button>
+                                    {(isReadingMode || isPdfMode) && <button onClick={() => isPdfMode ? closePdfReader() : setIsReadingMode(false)} className="min-h-[40px] px-3 inline-flex items-center gap-1.5 rounded-md text-[12px] font-medium text-gray-600 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-gray-800 transition-colors"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>退出</button>}
+                                </div>
+                                <div className="flex lg:hidden shrink-0 items-center gap-1">
+                                    <button onClick={handleToggleTheme} className="w-10 h-10 grid place-items-center rounded-md text-gray-600 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-gray-800 transition-colors" aria-label={typographyConfig.theme === 'dark' ? '切换到日间模式' : '切换到夜间模式'}>
+                                        {typographyConfig.theme === 'dark' ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.36-6.36l-1.42 1.42M7.06 16.94l-1.42 1.42m12.72 0l-1.42-1.42M7.06 7.06L5.64 5.64M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.35 15.35A9 9 0 018.65 3.65a9 9 0 1011.7 11.7z"></path></svg>}
+                                    </button>
+                                    {(isReadingMode || isPdfMode) && <button onClick={() => isPdfMode ? closePdfReader() : setIsReadingMode(false)} className="w-10 h-10 grid place-items-center rounded-md text-gray-600 dark:text-gray-300 hover:bg-sky-50 dark:hover:bg-gray-800 transition-colors" aria-label="退出当前阅读"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></button>}
+                                </div>
+                                <div className="relative shrink-0">
+                                    <button onClick={() => setIsHeaderMenuOpen(prev => !prev)} className="w-10 h-10 grid place-items-center rounded-md text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-gray-800 transition-colors" aria-label={isHeaderMenuOpen ? '收起主菜单' : '展开主菜单'} aria-expanded={isHeaderMenuOpen} title="主菜单">
+                                        {isHeaderMenuOpen ? (
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 15l-6-6-6 6"></path></svg>
+                                        ) : (
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 9l6 6 6-6"></path></svg>
+                                        )}
+                                    </button>
+                                    {isHeaderMenuOpen && (
+                                        <>
+                                            <button className="fixed inset-0 z-40 cursor-default" onClick={() => setIsHeaderMenuOpen(false)} aria-label="关闭主菜单"></button>
+                                            <div className="absolute right-0 top-12 z-50 w-64 p-2 bg-white dark:bg-gray-900 border border-sky-100 dark:border-gray-700 rounded-sm shadow-lg">
+                                                <div className="px-3 py-2 mb-1 text-[11px] text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                                                    {corpusCount} 句真题 · {Object.keys(presetDict).length} 个预设词 · {Object.keys(hardDict).length} 个生词
+                                                </div>
+                                                <button onClick={() => { setIsHistoryDrawerOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-sky-50 dark:hover:bg-gray-800">阅读库</button>
+                                                <button onClick={() => { setIsTypographyModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-sky-50 dark:hover:bg-gray-800">阅读排版</button>
+                                                <button onClick={() => { setIsDictModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-sky-50 dark:hover:bg-gray-800">个人词库</button>
+                                                <button onClick={() => { setIsApiModalOpen(true); setIsHeaderMenuOpen(false); }} className="w-full min-h-[42px] px-3 flex items-center rounded-sm text-[13px] text-gray-700 dark:text-gray-200 hover:bg-sky-50 dark:hover:bg-gray-800">模型配置</button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </header>
+
+'''
+          text = text[:header_start] + new_header + text[header_end:]
+
+          # 3. Remove heavy black accents in the light theme.
+          replacements = [
+              ("const mainColor = isRoot ? 'text-white' : 'text-gray-800 dark:text-gray-100';", "const mainColor = isRoot ? 'text-slate-800 dark:text-sky-100' : 'text-gray-800 dark:text-gray-100';", 'tree root main text'),
+              ("const subColor = isRoot ? 'text-gray-300' : 'text-gray-500 dark:text-gray-400';", "const subColor = isRoot ? 'text-slate-500 dark:text-sky-300/80' : 'text-gray-500 dark:text-gray-400';", 'tree root sub text'),
+              ("isRoot ? 'bg-gray-900 dark:bg-black border-gray-900 dark:border-gray-700'", "isRoot ? 'bg-sky-50 dark:bg-sky-950/40 border-sky-200 dark:border-sky-800'", 'tree root background'),
+              ("isRoot ? 'border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white'", "isRoot ? 'border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40'", 'tree root toggle'),
+              ("isRoot ? 'border-gray-700' : 'border-gray-100 dark:border-gray-700'", "isRoot ? 'border-sky-200 dark:border-sky-800' : 'border-gray-100 dark:border-gray-700'", 'tree root leaf border'),
+              ("isRoot ? 'bg-gray-400' : 'bg-gray-300 dark:bg-gray-600'", "isRoot ? 'bg-sky-400' : 'bg-gray-300 dark:bg-gray-600'", 'tree root dot'),
+              ("isRoot ? 'border-gray-700 text-gray-300' : 'border-gray-200 dark:border-gray-600 text-gray-400'", "isRoot ? 'border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300' : 'border-gray-200 dark:border-gray-600 text-gray-400'", 'tree root count'),
+              ('bg-slate-900 dark:bg-gray-900 p-4 rounded-xl shadow-inner', 'bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700 p-4 rounded-xl', 'writing tip panel'),
+              ('text-[13px] text-slate-300 dark:text-gray-300 leading-relaxed text-justify', 'text-[13px] text-slate-600 dark:text-slate-300 leading-relaxed text-justify', 'writing tip text'),
+              ('border-2 border-gray-900 dark:border-gray-100 bg-gray-50', 'border border-sky-300 dark:border-sky-700 bg-sky-50/70', 'pdf choice primary'),
+              ("currentHistoryId === record.id ? 'bg-gray-900 dark:bg-gray-800 border-gray-900 dark:border-gray-600 text-white shadow-md'", "currentHistoryId === record.id ? 'bg-sky-50 dark:bg-sky-900/25 border-sky-300 dark:border-sky-700 text-slate-800 dark:text-sky-100 shadow-sm'", 'history selected card'),
+              ("currentHistoryId === record.id ? 'text-gray-300'", "currentHistoryId === record.id ? 'text-sky-700 dark:text-sky-300'", 'history selected meta'),
+              ("currentHistoryId === record.id ? 'text-gray-100'", "currentHistoryId === record.id ? 'text-slate-800 dark:text-sky-100'", 'history selected excerpt'),
+              ('bg-gray-900 dark:bg-blue-600 text-white px-8', 'bg-sky-100 dark:bg-sky-700 text-sky-950 dark:text-white border border-sky-300 dark:border-sky-600 px-8', 'enter reading button'),
+              ('hover:bg-gray-800 dark:hover:bg-blue-700', 'hover:bg-sky-200 dark:hover:bg-sky-600', 'enter reading hover'),
+              ("showGlobalLogic ? 'bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 border-gray-900 dark:border-gray-100'", "showGlobalLogic ? 'bg-sky-100 dark:bg-sky-800/60 text-sky-900 dark:text-sky-100 border-sky-300 dark:border-sky-700'", 'global logic active'),
+              ("rightPanelTab === tab ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'", "rightPanelTab === tab ? 'bg-sky-100 text-sky-900 border border-sky-200 dark:bg-sky-800/60 dark:text-sky-100 dark:border-sky-700'", 'right panel active tab'),
+              ('className="absolute left-0 right-0 top-full z-30 mt-2 flex flex-wrap items-center gap-1.5 p-2 bg-gray-900 text-white rounded-sm shadow-lg animate-fade-in"', 'className="absolute left-0 right-0 top-full z-30 mt-2 flex flex-wrap items-center gap-1.5 p-2 bg-white/95 dark:bg-gray-800/95 text-slate-700 dark:text-slate-100 border border-sky-100 dark:border-gray-700 rounded-sm shadow-xl backdrop-blur animate-fade-in"', 'selection toolbar'),
+              ('text-[11px] text-gray-300 truncate', 'text-[11px] text-slate-500 dark:text-slate-300 truncate', 'selection excerpt'),
+              ('rounded-sm bg-white/10 hover:bg-white/20', 'rounded-sm bg-slate-100 hover:bg-slate-200 dark:bg-gray-700 dark:hover:bg-gray-600', 'selection neutral buttons'),
+              ('rounded-sm bg-amber-500/90 hover:bg-amber-500 text-gray-950 font-medium', 'rounded-sm bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 font-medium', 'selection annotation button')
+          ]
+          for old, new, label in replacements:
+              replace_at_least_once(old, new, label)
+
+          path.write_text(text, encoding='utf-8')
+          print('Reader UI first-batch patch applied successfully.')
+          PY
+
+      - name: Validate patch
+        shell: bash
+        run: |
+          git diff --check
+          grep -q 'ANNOTATION_COLOR_OPTIONS' index.html
+          grep -q 'data-annotation-color' index.html
+          grep -q 'max-w-\[1480px\]' index.html
+          grep -q 'reader-annotation-card' index.html
+
+      - name: Commit generated UI changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "feat: refine reader UI and annotation colors [skip ui-patch]"
+          git push origin HEAD:feat/reader-annotations-v2

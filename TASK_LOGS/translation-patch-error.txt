@@ -1,0 +1,6 @@
+preserve completion in bundle: expected 1 exact match, got 2
+Traceback (most recent call last):
+  File "<stdin>", line 28, in <module>
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/usr/bin/python', '/tmp/patch_reader.py']' returned non-zero exit status 1.

@@ -1,0 +1,84 @@
+name: Diagnose translation alignment patch
+
+on:
+  push:
+    branches:
+      - feat/reader-annotations-v2
+    paths:
+      - TASK_LOGS/.trigger-translation-read-status-debug
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/reader-annotations-v2
+          fetch-depth: 0
+
+      - name: Extract and run embedded patch
+        shell: bash
+        run: |
+          set +e
+          python - <<'PY' > /tmp/patch-output.txt 2>&1
+          from pathlib import Path
+          import base64, gzip, re, subprocess, sys
+
+          workflow = Path('.github/workflows/apply_reader_translation_read_status.yml').read_text(encoding='utf-8')
+          match = re.search(r"cat > /tmp/reader_patch\.b64 <<'B64'\n\s*([A-Za-z0-9+/=\n ]+?)\n\s*B64", workflow)
+          if not match:
+              raise SystemExit('Embedded patch payload not found')
+          payload = ''.join(match.group(1).split())
+          script = gzip.decompress(base64.b64decode(payload)).decode('utf-8')
+
+          bundle_old = '''replace_once(
+"""                        contentHash: sourceText ? await hashText(sourceText) : ''
+""",
+"""                        contentHash: sourceText ? await hashText(sourceText) : '',
+                        completedAt: existing?.article?.completedAt || record?.completedAt || null
+""",
+'preserve completion in bundle')'''
+          bundle_new = '''sub_once(
+    r"(contentHash: sourceText \\? await hashText\\(sourceText\\) : '')(\\n                    \\},\\n                    results:)",
+    r"\\1,\\n                        completedAt: existing?.article?.completedAt || record?.completedAt || null\\2",
+    'preserve completion in bundle',
+    flags=re.M
+)'''
+          if bundle_old not in script:
+              raise SystemExit('Completion bundle replacement hook not found')
+          script = script.replace(bundle_old, bundle_new, 1)
+
+          # Preserve JavaScript backslash sequences inside Python replacement literals.
+          script = script.replace('old_translation = """', 'old_translation = r"""', 1)
+          script = re.sub(r'(replace_once\(\n\s*)"""', r'\1r"""', script)
+          script = re.sub(r'(""",\n\s*)"""', r'\1r"""', script)
+
+          old = "replace_once(old_translation, new_translation, 'replace full translation protocol')"
+          replacement = '''sub_once(
+              r"        const callGeminiFullTranslation = async \\(fullText, apiConfig\\) => \\{[\\s\\S]*?\\n        \\};\\n\\n        const callGeminiTranslation",
+              new_translation + "\\n        const callGeminiTranslation",
+              'replace full translation protocol',
+              flags=re.M
+          )'''
+          if old not in script:
+              raise SystemExit('Translation replacement hook not found in patch')
+          patch_path = Path('/tmp/patch_reader.py')
+          patch_path.write_text(script.replace(old, replacement, 1), encoding='utf-8')
+          subprocess.run([sys.executable, '-m', 'py_compile', str(patch_path)], check=True)
+          subprocess.run([sys.executable, str(patch_path)], check=True)
+          PY
+          status=$?
+          cat /tmp/patch-output.txt
+          if [ "$status" -ne 0 ]; then
+            cp /tmp/patch-output.txt TASK_LOGS/translation-patch-error.txt
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add TASK_LOGS/translation-patch-error.txt
+            git commit -m "chore: log translation patch failure" || true
+            git push origin HEAD:feat/reader-annotations-v2
+            exit "$status"
+          fi
+          echo 'Patch succeeded during diagnostic run.'
