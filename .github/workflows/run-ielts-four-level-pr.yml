@@ -1,0 +1,77 @@
+name: Run IELTS four-level vocabulary PR
+
+on:
+  pull_request:
+    branches:
+      - feat/reader-annotations-v2
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.event.pull_request.number == 13 && github.event.pull_request.head.ref == 'feat/ielts-four-level-vocabulary'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out IELTS feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/ielts-four-level-vocabulary
+          fetch-depth: 0
+
+      - name: Extract and run staged generator
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/apply-ielts-four-level-vocabulary.yml')
+          text = workflow.read_text(encoding='utf-8')
+          step_start = text.index('      - name: Build four-level IELTS vocabulary and patch reader')
+          run_marker = text.index('        run: |', step_start)
+          body_start = text.index('\n', run_marker) + 1
+          body_end = text.index('\n      - name: Validate generated resources', body_start)
+          lines = text[body_start:body_end].splitlines()
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          script = script.replace(
+              "compressed = base64.b64decode(PAYLOAD.read_text(encoding='utf-8').strip())",
+              "payload_text = PAYLOAD.read_text(encoding='utf-8').strip()\npayload_text += '=' * (-len(payload_text) % 4)\ncompressed = base64.b64decode(payload_text)"
+          )
+          Path('/tmp/build-ielts-vocabulary.sh').write_text(script, encoding='utf-8')
+          PY
+          bash /tmp/build-ielts-vocabulary.sh
+
+      - name: Validate generated resources
+        shell: bash
+        run: |
+          python -m json.tool public-resources/ielts-vocabulary/ielts-vocabulary-4-level.json > /dev/null
+          test "$(python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('public-resources/ielts-vocabulary/ielts-vocabulary-4-level.json').read_text(encoding='utf-8'))
+          print(len(data))
+          PY
+          )" -eq 1992
+          grep -q '雅思核心词' index.html
+          grep -q '雅思场景词' index.html
+          grep -q '雅思基础重合词' index.html
+          grep -q '雅思扩展词' index.html
+          grep -q 'IELTS_DICT_URL' index.html
+          grep -q '<option value="daily">核心＋场景</option>' index.html
+          git diff --check
+
+      - name: Commit generated result to PR branch
+        shell: bash
+        run: |
+          rm -f .github/workflows/apply-ielts-four-level-vocabulary.yml
+          rm -f tools/ielts-vocabulary-4-level.payload.b64
+          rmdir tools 2>/dev/null || true
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add four-level IELTS vocabulary interaction'
+          git push origin HEAD:feat/ielts-four-level-vocabulary
