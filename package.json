@@ -1,0 +1,41 @@
+{
+  "name": "yang-reader",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Yang English Reader",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/build-cloudbase-v2.cjs",
+    "preview": "vite preview",
+    "test": "npm run test:unit && npm run lint:a11y && npm run build && npm run test:e2e",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "lint:a11y": "eslint src",
+    "check": "npm test"
+  },
+  "license": "ISC",
+  "overrides": {
+    "brace-expansion": "5.0.8",
+    "minimatch": "10.2.6"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "1.62.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "autoprefixer": "10.4.20",
+    "eslint": "9.39.5",
+    "eslint-plugin-jsx-a11y": "6.10.2",
+    "jsdom": "25.0.1",
+    "postcss": "8.5.24",
+    "tailwindcss": "3.4.17",
+    "vite": "7.3.6",
+    "vitest": "3.2.6"
+  },
+  "dependencies": {
+    "firebase": "11.6.1",
+    "pdfjs-dist": "5.7.284",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}
