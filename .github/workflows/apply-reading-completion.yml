@@ -4,13 +4,20 @@ on:
   push:
     branches:
       - feat/pwa-mobile-app
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
 
 permissions:
   contents: write
 
 jobs:
   patch-reading-completion:
-    if: contains(github.event.head_commit.message, '[run-reading-completion]')
+    if: >-
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[run-reading-completion]')) ||
+      (github.event_name == 'pull_request' && github.head_ref == 'feat/pwa-mobile-app')
     runs-on: ubuntu-latest
 
     steps:
@@ -37,123 +44,118 @@ jobs:
               text = text.replace(old, new, 1)
               print(f'{label}: applied')
 
-          save_history_anchor = '''    const saveHistoryToCloud = async (record) => {
-          const normalizedRecord = { ...record, createdAt: record.createdAt || Date.now() };
-          setHistory(prevHistory => {
-              const nextHistory = [normalizedRecord, ...prevHistory.filter(item => item.id !== normalizedRecord.id)]
-                  .sort((a, b) => b.createdAt - a.createdAt);
-              persistLocalState({ history: nextHistory });
-              return nextHistory;
-          });
+          def insert_before_in_section(section_start, section_end, marker, addition, label):
+              global text
+              start = text.index(section_start)
+              end = text.index(section_end, start)
+              section = text[start:end]
+              if addition.strip() in section:
+                  print(f'{label}: already present')
+                  return
+              marker_index = section.index(marker)
+              section = section[:marker_index] + addition + section[marker_index:]
+              text = text[:start] + section + text[end:]
+              print(f'{label}: applied')
 
-          if (!user || !dbInstance || !window.firebaseImports) return;
-          const { doc, setDoc } = window.firebaseImports;
-          const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-          try { await setDoc(doc(dbInstance, 'artifacts', appId, 'users', user.uid, 'history', normalizedRecord.id), normalizedRecord, { merge: true }); } catch(e) {}
-      };
-'''
+          if 'const toggleReadingCompletion = async' not in text:
+              helper_insert_at = text.index('    const getRecordSourceText')
+              helpers = '''    const formatReadingCompletionDate = (value) => {
+              const date = new Date(value);
+              if (Number.isNaN(date.getTime())) return '';
+              const year = String(date.getFullYear()).slice(-2);
+              const month = String(date.getMonth() + 1).padStart(2, '0');
+              const day = String(date.getDate()).padStart(2, '0');
+              return `${year}/${month}/${day}`;
+          };
 
-          completion_helpers = save_history_anchor + '''
-      const formatReadingCompletionDate = (value) => {
-          const date = new Date(value);
-          if (Number.isNaN(date.getTime())) return '';
-          const year = String(date.getFullYear()).slice(-2);
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          return `${year}/${month}/${day}`;
-      };
-
-      const toggleReadingCompletion = async (recordId, event) => {
-          event?.stopPropagation();
-          if (!recordId) return;
-          const record = history.find(item => item.id === recordId);
-          if (!record) {
-              window.showToast('未找到这篇文章的阅读记录', 'warning');
-              return;
-          }
-
-          const completedAt = record.completedAt ? null : Date.now();
-          const updatedRecord = { ...record, completedAt };
-          await saveHistoryToCloud(updatedRecord);
-
-          try {
-              const bundleKey = record.bundleKey || getArticleBundleKey(recordId);
-              const bundle = await readReaderStore('article-bundles', bundleKey);
-              if (bundle) {
-                  await writeReaderStore('article-bundles', {
-                      ...bundle,
-                      metadata: {
-                          ...(bundle.metadata || {}),
-                          completedAt,
-                          updatedAt: Date.now()
-                      }
-                  });
+          const toggleReadingCompletion = async (recordId, event) => {
+              event?.stopPropagation();
+              if (!recordId) return;
+              const record = history.find(item => item.id === recordId);
+              if (!record) {
+                  window.showToast('未找到这篇文章的阅读记录', 'warning');
+                  return;
               }
-          } catch (error) {
-              console.warn('Reading completion bundle update failed:', error);
-          }
 
-          window.showToast(completedAt ? '已标记为完成阅读' : '已取消完成阅读', 'success');
-      };
-'''
-          replace_once(save_history_anchor, completion_helpers, 'completion helpers')
+              const completedAt = record.completedAt ? null : Date.now();
+              await saveHistoryToCloud({ ...record, completedAt });
 
-          replace_once(
-              '''                promptVersion: CACHE_PROMPT_VERSION,
-                  updatedAt: Date.now()
-''',
-              '''                promptVersion: CACHE_PROMPT_VERSION,
-                  completedAt: existing?.metadata?.completedAt || record?.completedAt || null,
-                  updatedAt: Date.now()
-''',
+              try {
+                  const bundleKey = record.bundleKey || getArticleBundleKey(recordId);
+                  const bundle = await readReaderStore('article-bundles', bundleKey);
+                  if (bundle) {
+                      await writeReaderStore('article-bundles', {
+                          ...bundle,
+                          metadata: {
+                              ...(bundle.metadata || {}),
+                              completedAt,
+                              updatedAt: Date.now()
+                          }
+                      });
+                  }
+              } catch (error) {
+                  console.warn('Reading completion bundle update failed:', error);
+              }
+
+              window.showToast(completedAt ? '已标记为完成阅读' : '已取消完成阅读', 'success');
+          };
+
+          '''
+              text = text[:helper_insert_at] + helpers + text[helper_insert_at:]
+              print('completion helpers: applied')
+          else:
+              print('completion helpers: already present')
+
+          insert_before_in_section(
+              '    const buildBundleFromRecord = async',
+              '    const updateHistoryBundleMeta =',
+              '                updatedAt: Date.now()',
+              '                completedAt: existing?.metadata?.completedAt || record?.completedAt || null,\n',
               'bundle completion metadata'
           )
 
-          replace_once(
-              '''                hasFullQuiz: Boolean(bundle.results?.fullQuizData),
-                  updatedAt: Date.now()
-''',
-              '''                hasFullQuiz: Boolean(bundle.results?.fullQuizData),
-                  completedAt: bundle.metadata?.completedAt || existing.completedAt || null,
-                  updatedAt: Date.now()
-''',
+          insert_before_in_section(
+              '    const updateHistoryBundleMeta =',
+              '    const buildCurrentArticleBundle =',
+              '                updatedAt: Date.now()',
+              '                completedAt: bundle.metadata?.completedAt || existing.completedAt || null,\n',
               'history bundle completion metadata'
           )
 
-          replace_once(
-              '''                promptVersion: CACHE_PROMPT_VERSION,
-                  updatedAt: Date.now()
-              }
-          };
-''',
-              '''                promptVersion: CACHE_PROMPT_VERSION,
-                  completedAt: record.completedAt || base.metadata?.completedAt || null,
-                  updatedAt: Date.now()
-              }
-          };
-''',
+          insert_before_in_section(
+              '    const buildCurrentArticleBundle =',
+              '    const persistCurrentArticleBundle =',
+              '                updatedAt: Date.now()',
+              '                completedAt: record.completedAt || base.metadata?.completedAt || null,\n',
               'current bundle completion metadata'
           )
 
-          replace_once(
-              '''                hasFullMap: Boolean(bundle.results.fullMapData),
+          import_start = text.index('    const importMarkdownFiles = async')
+          import_end = text.index('    const handleMarkdownUpload = async', import_start)
+          import_section = text[import_start:import_end]
+          if 'completedAt: bundle.metadata?.completedAt || null' not in import_section:
+              old = '''                hasFullMap: Boolean(bundle.results.fullMapData),
                   hasFullQuiz: Boolean(bundle.results.fullQuizData)
-              });
-''',
-              '''                hasFullMap: Boolean(bundle.results.fullMapData),
+'''
+              new = '''                hasFullMap: Boolean(bundle.results.fullMapData),
                   hasFullQuiz: Boolean(bundle.results.fullQuizData),
                   completedAt: bundle.metadata?.completedAt || null
-              });
-''',
-              'markdown completion restore'
-          )
+'''
+              if old not in import_section:
+                  raise RuntimeError('markdown completion restore: marker missing')
+              import_section = import_section.replace(old, new, 1)
+              text = text[:import_start] + import_section + text[import_end:]
+              print('markdown completion restore: applied')
+          else:
+              print('markdown completion restore: already present')
 
-          replace_once(
-              '''    const currentArticleTitle = currentHistoryId
+          if 'const currentArticleCompletedAt =' not in text:
+              replace_once(
+                  '''    const currentArticleTitle = currentHistoryId
           ? (history.find(item => item.id === currentHistoryId)?.title || inferArticleTitleFromText(inputText))
           : inferArticleTitleFromText(inputText);
 ''',
-              '''    const currentHistoryRecord = currentHistoryId
+                  '''    const currentHistoryRecord = currentHistoryId
           ? history.find(item => item.id === currentHistoryId)
           : null;
       const currentArticleCompletedAt = currentHistoryRecord?.completedAt || null;
@@ -161,13 +163,16 @@ jobs:
           ? (currentHistoryRecord?.title || inferArticleTitleFromText(inputText))
           : inferArticleTitleFromText(inputText);
 ''',
-              'current completion state'
-          )
+                  'current completion state'
+              )
+          else:
+              print('current completion state: already present')
 
-          replace_once(
-              '''                                <div ref={fullTextMenuContainerRef} className="relative shrink-0">
+          if 'aria-pressed={Boolean(currentArticleCompletedAt)}' not in text:
+              replace_once(
+                  '''                                <div ref={fullTextMenuContainerRef} className="relative shrink-0">
 ''',
-              '''                                <button
+                  '''                                <button
                                       type="button"
                                       onClick={(event) => toggleReadingCompletion(currentHistoryId, event)}
                                       disabled={!currentHistoryId}
@@ -181,14 +186,17 @@ jobs:
 
                                   <div ref={fullTextMenuContainerRef} className="relative shrink-0">
 ''',
-              'reader completion button'
-          )
+                  'reader completion button'
+              )
+          else:
+              print('reader completion button: already present')
 
-          replace_once(
-              '''                                                <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{record.title || window.getExcerpt(record.text || record.preview || '')}</div>
+          if '✓ 已完成阅读 {formatReadingCompletionDate(record.completedAt)}' not in text:
+              replace_once(
+                  '''                                                <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{record.title || window.getExcerpt(record.text || record.preview || '')}</div>
                                                   <div className="mt-3 flex flex-wrap gap-2 items-center text-[10px] font-medium">
 ''',
-              '''                                                <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{record.title || window.getExcerpt(record.text || record.preview || '')}</div>
+                  '''                                                <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{record.title || window.getExcerpt(record.text || record.preview || '')}</div>
                                                   {record.completedAt && (
                                                       <div className={`mt-2 text-[10.5px] font-medium tracking-wide ${currentHistoryId === record.id ? 'text-emerald-200' : 'text-emerald-700 dark:text-emerald-300'}`}>
                                                           ✓ 已完成阅读 {formatReadingCompletionDate(record.completedAt)}
@@ -196,14 +204,17 @@ jobs:
                                                   )}
                                                   <div className="mt-3 flex flex-wrap gap-2 items-center text-[10px] font-medium">
 ''',
-              'library completion label'
-          )
+                  'library completion label'
+              )
+          else:
+              print('library completion label: already present')
 
-          replace_once(
-              '''                                                    {record.hasFullQuiz && <span className="px-2 py-0.5 rounded-sm border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">练习已缓存</span>}
+          if 'aria-label={`${record.completedAt ? \'取消完成\' : \'完成阅读\'}：${record.title || \'未命名文章\'}`}' not in text:
+              replace_once(
+                  '''                                                    {record.hasFullQuiz && <span className="px-2 py-0.5 rounded-sm border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">练习已缓存</span>}
                                                   </div>
 ''',
-              '''                                                    {record.hasFullQuiz && <span className="px-2 py-0.5 rounded-sm border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">练习已缓存</span>}
+                  '''                                                    {record.hasFullQuiz && <span className="px-2 py-0.5 rounded-sm border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">练习已缓存</span>}
                                                       <button
                                                           type="button"
                                                           onClick={(event) => toggleReadingCompletion(record.id, event)}
@@ -214,8 +225,10 @@ jobs:
                                                       </button>
                                                   </div>
 ''',
-              'library completion button'
-          )
+                  'library completion button'
+              )
+          else:
+              print('library completion button: already present')
 
           path.write_text(text, encoding='utf-8')
           PY
