@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   generate:
-    if: github.event.pull_request.head.ref == 'feat/ielts-four-level-vocabulary'
+    if: github.event.pull_request.number == 13 && github.event.pull_request.head.ref == 'feat/ielts-four-level-vocabulary'
     runs-on: ubuntu-latest
     steps:
       - name: Check out IELTS feature branch
@@ -37,6 +37,10 @@ jobs:
           body_end = text.index('\n      - name: Validate generated resources', body_start)
           lines = text[body_start:body_end].splitlines()
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+          script = script.replace(
+              "compressed = base64.b64decode(PAYLOAD.read_text(encoding='utf-8').strip())",
+              "payload_text = PAYLOAD.read_text(encoding='utf-8').strip()\npayload_text += '=' * (-len(payload_text) % 4)\ncompressed = base64.b64decode(payload_text)"
+          )
           Path('/tmp/build-ielts-vocabulary.sh').write_text(script, encoding='utf-8')
           PY
           bash /tmp/build-ielts-vocabulary.sh
