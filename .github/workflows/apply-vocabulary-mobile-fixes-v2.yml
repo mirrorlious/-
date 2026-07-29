@@ -41,17 +41,19 @@ jobs:
 
           block_start = script.index('prop_old = """')
           block_end = script.index("\n\ntext = paragraph.read_text", block_start)
-          replacement = '''prop_pattern = re.compile(
-    r"(inlineResultsEnabled=\\{!isLearningPanelDocked\\}\\s*\\n)(\\s*onPersistParagraphResult=\\{handlePersistParagraphResult\\})"
-)
-text, count = prop_pattern.subn(
-    r"\\1                                        compactActionsEnabled={!isLearningPanelWide}\\n\\2",
-    text,
-    count=1,
-)
-if count != 1:
-    raise SystemExit(f'compact action prop regex: expected 1 match, found {count}')
-app.write_text(text, encoding='utf-8')'''
+          replacement = (
+              "prop_pattern = re.compile(\\n"
+              "    r\"(inlineResultsEnabled=\\\\{!isLearningPanelDocked\\\\}\\\\s*\\\\n)(\\\\s*onPersistParagraphResult=\\\\{handlePersistParagraphResult\\\\})\"\\n"
+              ")\\n"
+              "text, count = prop_pattern.subn(\\n"
+              "    r\"\\\\1                                        compactActionsEnabled={!isLearningPanelWide}\\\\n\\\\2\",\\n"
+              "    text,\\n"
+              "    count=1,\\n"
+              ")\\n"
+              "if count != 1:\\n"
+              "    raise SystemExit(f'compact action prop regex: expected 1 match, found {count}')\\n"
+              "app.write_text(text, encoding='utf-8')"
+          )
           script = script[:block_start] + replacement + script[block_end:]
           Path('/tmp/apply-vocabulary-mobile-fixes.sh').write_text(script, encoding='utf-8')
           PY
