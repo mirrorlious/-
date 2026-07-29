@@ -617,12 +617,15 @@ const handleVocabularySourceChange = (nextSource) => {
         }
     };
 
+
     const focusAnnotation = (annotationId) => {
         setActiveAnnotationId(annotationId);
         setNotesView('annotations');
-        setRightPanelTab('notes');
-        setLayoutMode('split');
-        setRightPanelOpen(true);
+        if (isLearningPanelWide) {
+            setRightPanelTab('notes');
+            setLayoutMode('split');
+            setRightPanelOpen(true);
+        }
         window.requestAnimationFrame(() => {
             document.querySelector(`[data-annotation-id="${annotationId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
@@ -2698,7 +2701,7 @@ const handleVocabularySourceChange = (nextSource) => {
                                         typographyConfig={typographyConfig}
                                         savedResults={paragraphResults[String(idx)] || null}
                                         inlineResultsEnabled={!isLearningPanelDocked}
-                                        compactActionsEnabled={!isLearningPanelWide}
+                                        mobileAnnotationBubbleEnabled={!isLearningPanelWide}
                                         onPersistParagraphResult={handlePersistParagraphResult}
                                         onOpenAnalysis={(result) => {
                                             if (isLearningPanelDocked) {

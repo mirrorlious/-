@@ -170,8 +170,9 @@ const splitTextByAnnotations = (segmentText, segmentStart, annotations) => {
     return pieces;
 };
 
-const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId, activeDicts, masteredLemmaSet, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig, savedResults = null, inlineResultsEnabled = true, compactActionsEnabled = false, onPersistParagraphResult, onOpenAnalysis, onRequestAnnotation, onFocusAnnotation, onMasterWord }) => {
+const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId, activeDicts, masteredLemmaSet, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig, savedResults = null, inlineResultsEnabled = true, mobileAnnotationBubbleEnabled = false, onPersistParagraphResult, onOpenAnalysis, onRequestAnnotation, onFocusAnnotation, onMasterWord }) => {
     const [showTranslation, setShowTranslation] = useState(false);
+    const [mobileAnnotationId, setMobileAnnotationId] = useState(null);
     const [localTranslation, setLocalTranslation] = useState(savedResults?.translation || "");
     const [isLocalTransLoading, setIsLocalTransLoading] = useState(false);
 
@@ -326,6 +327,24 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
         setIsInteracting(false);
     };
 
+const handleAnnotationOpen = (annotationId, event) => {
+    event?.stopPropagation();
+    if (event?.type === 'keydown') event.preventDefault();
+    if (mobileAnnotationBubbleEnabled) {
+        setMobileAnnotationId(previous => previous === annotationId ? null : annotationId);
+        return;
+    }
+    onFocusAnnotation?.(annotationId);
+};
+
+useEffect(() => {
+    if (!mobileAnnotationBubbleEnabled || !activeAnnotationId) return;
+    if (annotations.some(annotation => annotation.id === activeAnnotationId)) {
+        setMobileAnnotationId(activeAnnotationId);
+    }
+}, [mobileAnnotationBubbleEnabled, activeAnnotationId, annotations]);
+
+
     const handleCopyParagraph = async (event) => {
         event.stopPropagation();
         try {
@@ -362,6 +381,7 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
 
     const handleToggleTrans = async (e) => {
         e.stopPropagation();
+        if (e.detail > 1) return;
         if (showTranslation) { setShowTranslation(false); return; }
         const existingTranslation = translationText || localTranslation;
         if (existingTranslation) {
@@ -385,6 +405,7 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
 
     const handleToggleAnalysis = async (e) => {
         e.stopPropagation();
+        if (e.detail > 1) return;
         if (showAnalysis) { setShowAnalysis(false); return; }
         if (analysisData) {
             setShowAnalysis(true);
@@ -711,6 +732,7 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
     });
 
     const finalTranslationToShow = translationText || localTranslation;
+    const activeMobileAnnotation = annotations.find(annotation => annotation.id === mobileAnnotationId) || null;
 
     return (
             <div
@@ -742,8 +764,8 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
                                     className={`reader-annotation-mark ${isActiveAnnotation ? 'reader-annotation-mark-active' : ''}`}
                                     style={annotationCssVariables(primaryAnnotation?.color || 'gold')}
                                     title={`${piece.annotationIds.length} 条批注`}
-                                    onClick={(event) => { event.stopPropagation(); onFocusAnnotation?.(primaryAnnotationId); }}
-                                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onFocusAnnotation?.(primaryAnnotationId); } }}
+                                    onClick={(event) => handleAnnotationOpen(primaryAnnotationId, event)}
+                                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') handleAnnotationOpen(primaryAnnotationId, event); }}
                                 >
                                     {content}
                                 </span>
@@ -752,27 +774,11 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
                     </Fragment>
                 ))}
             </div>
-
-            {compactActionsEnabled && (
-        <div className="mt-2 mb-3 flex items-center gap-2" data-reader-mobile-actions="true">
-            <button
-                type="button"
-                onClick={handleToggleTrans}
-                disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow}
-                aria-expanded={showTranslation}
-                className="min-h-[38px] px-3 inline-flex items-center gap-2 rounded-sm border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 text-[12px] font-medium text-sky-700 dark:text-sky-300 disabled:opacity-50"
-            >
-                {(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? '翻译中…' : showTranslation ? '收起翻译' : '翻译本段'}
-                {finalTranslationToShow && !showTranslation && <span className="text-[10px] opacity-70">已缓存</span>}
-            </button>
-        </div>
-    )}
-
-                {annotations.length > 0 && (
+{annotations.length > 0 && (
                 <button
                     type="button"
                     data-reader-note-flag="true"
-                    onClick={(event) => { event.stopPropagation(); onFocusAnnotation?.(annotations[0].id); }}
+                    onClick={(event) => handleAnnotationOpen(annotations[0].id, event)}
                     className="absolute right-0 md:-right-10 bottom-0 z-20 min-w-[30px] h-8 px-1.5 inline-flex items-center justify-center gap-1 rounded-sm border border-amber-200 dark:border-amber-800 bg-amber-50/95 dark:bg-amber-900/25 text-amber-700 dark:text-amber-300 shadow-sm hover:border-amber-400"
                     title={`本段有 ${annotations.length} 条选区笔记`}
                     aria-label={`打开第 ${paragraphIndex + 1} 段的 ${annotations.length} 条选区笔记`}
@@ -780,6 +786,36 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
                     <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3a1 1 0 011-1h9.5a1 1 0 01.8 1.6L15 7l2.3 3.4a1 1 0 01-.8 1.6H8v9a1 1 0 11-2 0V3z"/></svg>
                     <span className="text-[10px] font-semibold">{annotations.length}</span>
                 </button>
+            )}
+
+
+            {mobileAnnotationBubbleEnabled && activeMobileAnnotation && (
+                <>
+                    <button
+                        type="button"
+                        className="fixed inset-0 z-[70] bg-black/10 backdrop-blur-[1px]"
+                        aria-label="关闭批注气泡"
+                        onClick={() => setMobileAnnotationId(null)}
+                    />
+                    <aside
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label="本段批注"
+                        data-reader-annotation-bubble="true"
+                        className="fixed left-3 right-3 bottom-[max(14px,env(safe-area-inset-bottom))] z-[71] max-h-[46vh] overflow-y-auto rounded-2xl border border-amber-200 dark:border-amber-800 bg-white/98 dark:bg-gray-900/98 shadow-2xl p-4 animate-fade-in-down"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <div className="text-[10px] font-semibold tracking-wider text-amber-700 dark:text-amber-400">本段批注</div>
+                                <div className="mt-1 text-[12px] leading-relaxed text-amber-800 dark:text-amber-300 line-clamp-3">“{activeMobileAnnotation.anchor?.exact || '已标注文字'}”</div>
+                            </div>
+                            <button type="button" onClick={() => setMobileAnnotationId(null)} className="shrink-0 w-8 h-8 grid place-items-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300" aria-label="关闭批注">×</button>
+                        </div>
+                        <div className="mt-3 whitespace-pre-wrap text-[14px] leading-7 text-gray-800 dark:text-gray-200">{activeMobileAnnotation.note || '这条批注暂时没有正文。'}</div>
+                        <div className="mt-3 text-[10px] text-gray-400">{new Date(activeMobileAnnotation.updatedAt || activeMobileAnnotation.createdAt || Date.now()).toLocaleString('zh-CN')}</div>
+                    </aside>
+                </>
             )}
 
             {selectedText && (
