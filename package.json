@@ -5,7 +5,9 @@
   "type": "module",
   "description": "Yang English Reader",
   "scripts": {
+    "predev": "node scripts/generate-pwa-icons.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/generate-pwa-icons.mjs",
     "build": "vite build && node scripts/build-cloudbase-v2.cjs",
     "preview": "vite preview",
     "test": "npm run test:unit && npm run lint:a11y && npm run build && npm run test:e2e",
@@ -15,6 +17,9 @@
     "check": "npm test"
   },
   "license": "ISC",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "overrides": {
     "brace-expansion": "5.0.8",
     "minimatch": "10.2.6"

@@ -18,7 +18,9 @@ import {
   setDoc
 } from 'firebase/firestore';
 import App from './App.jsx';
+import { registerPwa } from './pwa/registerPwa.js';
 import './styles/app.css';
+import './styles/pwa-mobile.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 window.pdfjsLib = pdfjsLib;
@@ -42,3 +44,5 @@ createRoot(document.getElementById('root')).render(
     <App />
   </React.StrictMode>
 );
+
+registerPwa();
