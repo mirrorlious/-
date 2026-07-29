@@ -53,8 +53,19 @@ jobs:
           lines = text[body_start:body_end].splitlines()
           script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
           script = script.replace(
-              "text = INDEX.read_text(encoding='utf-8-sig')",
-              "text = INDEX.read_text(encoding='utf-8-sig')\ntext = text.replace(chr(13) + chr(10), chr(10)).replace(chr(13), chr(10))"
+              "text = replace_once(text, old_entry_return, new_entry_return, 'lemma metadata propagation')",
+              """lemma_pattern = re.compile(
+    r\"[ \\t]+return\\s*\\{\\s*\"
+    r\"translation:\\s*entry\\.translation\\s*\\|\\|\\s*entry\\.zh\\s*\\|\\|\\s*'',\\s*\"
+    r\"category:\\s*entry\\.category\\s*\\|\\|\\s*'',\\s*\"
+    r\"memo:\\s*entry\\.memo\\s*\\|\\|\\s*'',\\s*\"
+    r\"note:\\s*entry\\.memo\\s*\\|\\|\\s*'',\\s*\"
+    r\"type,\\s*word\\s*\\};\",
+    re.S,
+)
+text, lemma_count = lemma_pattern.subn(new_entry_return, text, count=1)
+if lemma_count != 1:
+    raise SystemExit(f'lemma metadata propagation: expected one regex match, found {lemma_count}')"""
           )
           Path('/tmp/build-ielts-vocabulary.sh').write_text(script, encoding='utf-8')
           PY
