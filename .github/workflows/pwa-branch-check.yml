@@ -1,0 +1,54 @@
+name: PWA branch check
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'public/**'
+      - 'scripts/generate-pwa-icons.mjs'
+      - 'src/main.jsx'
+      - 'src/pwa/**'
+      - 'src/styles/pwa-mobile.css'
+      - 'vite.config.js'
+      - '.github/workflows/pwa-branch-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pwa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Build production app
+        run: npm run build
+
+      - name: Validate PWA output
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f dist/index.html
+          test -f dist/manifest.webmanifest
+          test -f dist/sw.js
+          test -f dist/icons/apple-touch-icon.png
+          test -f dist/icons/icon-192.png
+          test -f dist/icons/icon-512.png
+          test -f dist/icons/icon-maskable-512.png
+          node --check dist/sw.js
+          node -e "const fs=require('fs'); const manifest=JSON.parse(fs.readFileSync('dist/manifest.webmanifest','utf8')); if(manifest.display!=='standalone') throw new Error('Manifest display must be standalone'); if(!Array.isArray(manifest.icons)||manifest.icons.length<3) throw new Error('PWA icons are incomplete');"
