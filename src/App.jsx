@@ -176,7 +176,15 @@ const App = () => {
     useEffect(() => {
         if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
         const mediaQuery = window.matchMedia('(min-width: 1200px)');
-        const syncLearningPanelWidth = () => setIsLearningPanelWide(mediaQuery.matches);
+        const syncLearningPanelWidth = () => {
+    const isWide = mediaQuery.matches;
+    setIsLearningPanelWide(isWide);
+    if (!isWide) {
+        setLayoutMode('standard');
+        setArticleColumnMode('single');
+        setRightPanelOpen(false);
+    }
+};
         syncLearningPanelWidth();
         if (typeof mediaQuery.addEventListener === 'function') {
             mediaQuery.addEventListener('change', syncLearningPanelWidth);
@@ -260,7 +268,8 @@ const App = () => {
     const [readingMode, setReadingMode] = useState('intensive');
     const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
 
-    const [highlightMode, setHighlightMode] = useState('daily');
+    const [vocabularySource, setVocabularySource] = useState('all');
+    const [highlightMode, setHighlightMode] = useState('all');
 
     const [fullTranslations, setFullTranslations] = useState([]);
     const [isFullTransLoading, setIsFullTransLoading] = useState(false);
@@ -323,10 +332,26 @@ const App = () => {
     const [authInstance, setAuthInstance] = useState(null);
     const [corpusCount, setCorpusCount] = useState(0);
 
-    const activeDicts = useMemo(() => [
-        { data: ieltsDict, type: 'extended' },
-        { data: customDict, type: 'custom' }
-    ], [ieltsDict, customDict]);
+    const activeDicts = useMemo(() => {
+    const ieltsSource = { data: ieltsDict, type: 'extended' };
+    const kaoyanSources = [
+        { data: extraDict, type: 'extra' },
+        { data: requiredDict, type: 'required' },
+        { data: basicDict, type: 'basic' }
+    ];
+    const customSource = { data: customDict, type: 'custom' };
+
+    if (vocabularySource === 'ielts') return [ieltsSource, customSource];
+    if (vocabularySource === 'kaoyan') return [...kaoyanSources, customSource];
+    return [ieltsSource, ...kaoyanSources, customSource];
+}, [vocabularySource, ieltsDict, extraDict, requiredDict, basicDict, customDict]);
+
+const handleVocabularySourceChange = (nextSource) => {
+    setVocabularySource(nextSource);
+    if (nextSource === 'ielts') setHighlightMode('daily');
+    else if (nextSource === 'kaoyan') setHighlightMode('exam');
+    else setHighlightMode('all');
+};
     const masteredLemmaSet = useMemo(() => new Set(masteredLemmas), [masteredLemmas]);
 
     useEffect(() => {
@@ -348,8 +373,8 @@ const App = () => {
             setExtraDict(extra);
             setIeltsDict(ielts);
         }).catch(error => {
-            console.error('Error loading IELTS vocabulary packs:', error);
-            window.showToast('雅思分层词库加载失败，请刷新后重试', 'error');
+            console.error('Error loading vocabulary packs:', error);
+            window.showToast('词汇库加载失败，请刷新后重试', 'error');
         });
     }, []);
 
@@ -2561,16 +2586,16 @@ const App = () => {
                                     <button type="button" onClick={() => setLayoutMode('standard')} className={readerToolbarIconClass(layoutMode === 'standard')} aria-pressed={layoutMode === 'standard'} aria-label="标准布局" title="标准布局">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5" strokeWidth="1.8"></rect><path strokeLinecap="round" strokeWidth="1.8" d="M8 9h8M8 13h8M8 17h5"></path></svg>
                                     </button>
-                                    <button type="button" onClick={() => setLayoutMode('split')} className={readerToolbarIconClass(layoutMode === 'split')} aria-pressed={layoutMode === 'split'} aria-label="正文与侧栏分栏" title="正文与侧栏分栏">
+                                    <button type="button" onClick={() => setLayoutMode('split')} disabled={!isLearningPanelWide} className={`${readerToolbarIconClass(layoutMode === 'split')} disabled:opacity-35 disabled:cursor-not-allowed`} aria-pressed={layoutMode === 'split'} aria-label="正文与侧栏分栏" title={!isLearningPanelWide ? '手机端不支持分栏布局' : '正文与侧栏分栏'}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5" strokeWidth="1.8"></rect><path strokeWidth="1.8" d="M14 5v14"></path></svg>
                                     </button>
                                     <button type="button" onClick={() => setLayoutMode('focus')} className={readerToolbarIconClass(layoutMode === 'focus')} aria-pressed={layoutMode === 'focus'} aria-label="专注布局" title="专注布局">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="7" y="4" width="10" height="16" rx="1.5" strokeWidth="1.8"></rect><path strokeLinecap="round" strokeWidth="1.8" d="M9.5 8h5M9.5 12h5M9.5 16h3"></path></svg>
                                     </button>
-                                    <button type="button" onClick={() => setArticleColumnMode(previous => previous === 'double' ? 'single' : 'double')} className={readerToolbarIconClass(articleColumnMode === 'double')} aria-pressed={articleColumnMode === 'double'} aria-label={articleColumnMode === 'double' ? '切换为文章单栏' : '切换为文章双栏'} title={articleColumnMode === 'double' ? '文章双栏已开启' : '文章单栏'}>
+                                    <button type="button" onClick={() => setArticleColumnMode(previous => previous === 'double' ? 'single' : 'double')} disabled={!isLearningPanelWide} className={`${readerToolbarIconClass(articleColumnMode === 'double')} disabled:opacity-35 disabled:cursor-not-allowed`} aria-pressed={articleColumnMode === 'double'} aria-label={articleColumnMode === 'double' ? '切换为文章单栏' : '切换为文章双栏'} title={!isLearningPanelWide ? '手机端固定为文章单栏' : articleColumnMode === 'double' ? '文章双栏已开启' : '文章单栏'}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="1.5" strokeWidth="1.8"></rect><path strokeWidth="1.8" d="M12 4v16"></path><path strokeLinecap="round" strokeWidth="1.5" d="M6.5 8h3M6.5 11h3M14.5 8h3M14.5 11h3M6.5 14h3M14.5 14h3"></path></svg>
                                     </button>
-                                    <button type="button" onClick={() => setRightPanelOpen(previous => !previous)} disabled={layoutMode !== 'split'} className={readerToolbarIconClass(layoutMode === 'split' && rightPanelOpen)} aria-pressed={layoutMode === 'split' && rightPanelOpen} aria-label={rightPanelOpen ? '隐藏学习侧栏' : '显示学习侧栏'} title={layoutMode !== 'split' ? '请先切换到分栏布局' : rightPanelOpen ? '隐藏学习侧栏' : '显示学习侧栏'}>
+                                    <button type="button" onClick={() => setRightPanelOpen(previous => !previous)} disabled={!isLearningPanelWide || layoutMode !== 'split'} className={`${readerToolbarIconClass(layoutMode === 'split' && rightPanelOpen)} disabled:opacity-35 disabled:cursor-not-allowed`} aria-pressed={layoutMode === 'split' && rightPanelOpen} aria-label={rightPanelOpen ? '隐藏学习侧栏' : '显示学习侧栏'} title={!isLearningPanelWide ? '手机端不启用学习侧栏' : layoutMode !== 'split' ? '请先切换到分栏布局' : rightPanelOpen ? '隐藏学习侧栏' : '显示学习侧栏'}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5" strokeWidth="1.8"></rect><path strokeWidth="1.8" d="M15 5v14"></path><path strokeLinecap="round" strokeWidth="1.5" d="M17.5 9h1M17.5 12h1M17.5 15h1"></path></svg>
                                     </button>
                                     <button type="button" onClick={toggleBrowserFullscreen} className={readerToolbarIconClass(isBrowserFullscreen)} aria-pressed={isBrowserFullscreen} aria-label={isBrowserFullscreen ? '退出浏览器全屏' : '浏览器全屏'} title={isBrowserFullscreen ? '退出浏览器全屏' : '浏览器全屏'}>
@@ -2579,16 +2604,40 @@ const App = () => {
                                 </div>
 
                                 {readingMode === 'intensive' && (
-                                    <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="词汇高亮范围" title="词汇高亮范围" className="h-9 w-[124px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
-                              <option value="daily">核心＋场景</option>
-                              <option value="all">全部雅思词</option>
-                              <option value="core">雅思核心词</option>
-                              <option value="scenario">雅思场景词</option>
-                              <option value="overlap">基础重合词</option>
-                              <option value="extended">雅思扩展词</option>
-                              <option value="none">关闭标注</option>
-                          </select>
-                                )}
+                          <div className="flex items-center gap-1 shrink-0" role="group" aria-label="词汇标注设置">
+                              <select value={vocabularySource} onChange={(event) => handleVocabularySourceChange(event.target.value)} aria-label="词汇库来源" title="词汇库来源" className="h-9 w-[72px] sm:w-[82px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                  <option value="all">全部</option>
+                                  <option value="ielts">雅思</option>
+                                  <option value="kaoyan">考研</option>
+                              </select>
+
+                              {vocabularySource === 'all' ? (
+                                  <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="全部词汇显示范围" title="全部词汇显示范围" className="h-9 w-[104px] sm:w-[116px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                      <option value="all">全部词汇</option>
+                                      <option value="none">关闭标注</option>
+                                  </select>
+                              ) : vocabularySource === 'ielts' ? (
+                                  <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="雅思词汇显示范围" title="雅思词汇显示范围" className="h-9 w-[112px] sm:w-[126px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                      <option value="daily">核心＋场景</option>
+                                      <option value="all">全部雅思词</option>
+                                      <option value="core">雅思核心词</option>
+                                      <option value="scenario">雅思场景词</option>
+                                      <option value="overlap">基础重合词</option>
+                                      <option value="extended">雅思扩展词</option>
+                                      <option value="none">关闭标注</option>
+                                  </select>
+                              ) : (
+                                  <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="考研词汇显示范围" title="考研词汇显示范围" className="h-9 w-[112px] sm:w-[126px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                      <option value="exam">必考＋超纲</option>
+                                      <option value="all">全部考研词</option>
+                                      <option value="basic">考研基础词</option>
+                                      <option value="required">考研必考词</option>
+                                      <option value="extra">考研超纲词</option>
+                                      <option value="none">关闭标注</option>
+                                  </select>
+                              )}
+                          </div>
+                      )}
 
                                 <div ref={fullTextMenuContainerRef} className="relative shrink-0">
                                     <button ref={fullTextMenuTriggerRef} type="button" data-reader-fulltext-trigger="true" onClick={() => setIsFullTextMenuOpen(previous => !previous)} aria-haspopup="menu" aria-expanded={isFullTextMenuOpen} aria-controls="reader-fulltext-menu" className={readerToolbarIconClass(isFullTextMenuOpen)} aria-label="全文工具" title="全文工具">
@@ -2649,6 +2698,7 @@ const App = () => {
                                         typographyConfig={typographyConfig}
                                         savedResults={paragraphResults[String(idx)] || null}
                                         inlineResultsEnabled={!isLearningPanelDocked}
+                                        compactActionsEnabled={!isLearningPanelWide}
                                         onPersistParagraphResult={handlePersistParagraphResult}
                                         onOpenAnalysis={(result) => {
                                             if (isLearningPanelDocked) {

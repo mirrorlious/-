@@ -36,6 +36,21 @@ const VOCAB_TYPE_META = {
         underline: 'decoration-violet-500 dark:decoration-violet-400 decoration-dotted',
         badge: 'bg-violet-600 dark:bg-violet-700', text: 'text-violet-700 dark:text-violet-300'
     },
+    basic: {
+        label: '考研基础词', advice: '基础掌握',
+        underline: 'decoration-green-600 dark:decoration-green-400',
+        badge: 'bg-green-600 dark:bg-green-700', text: 'text-green-700 dark:text-green-300'
+    },
+    required: {
+        label: '考研必考词', advice: '重点掌握',
+        underline: 'decoration-blue-700 dark:decoration-blue-400',
+        badge: 'bg-blue-700 dark:bg-blue-700', text: 'text-blue-700 dark:text-blue-300'
+    },
+    extra: {
+        label: '考研超纲词', advice: '拓展掌握',
+        underline: 'decoration-red-600 dark:decoration-red-400',
+        badge: 'bg-red-600 dark:bg-red-700', text: 'text-red-700 dark:text-red-300'
+    },
     custom: {
         label: '个人词库', advice: '个人标记',
         underline: 'decoration-rose-500 dark:decoration-rose-400 decoration-dotted',
@@ -52,6 +67,7 @@ const shouldShowVocabType = (type, highlightMode) => {
     if (highlightMode === 'none') return false;
     if (highlightMode === 'all') return true;
     if (highlightMode === 'daily') return type === 'core' || type === 'scenario';
+    if (highlightMode === 'exam') return type === 'required' || type === 'extra';
     return highlightMode === type;
 };
 
@@ -154,7 +170,7 @@ const splitTextByAnnotations = (segmentText, segmentStart, annotations) => {
     return pieces;
 };
 
-const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId, activeDicts, masteredLemmaSet, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig, savedResults = null, inlineResultsEnabled = true, onPersistParagraphResult, onOpenAnalysis, onRequestAnnotation, onFocusAnnotation, onMasterWord }) => {
+const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId, activeDicts, masteredLemmaSet, readingMode, highlightMode, translationText, isTransLoading, apiConfig, typographyConfig, savedResults = null, inlineResultsEnabled = true, compactActionsEnabled = false, onPersistParagraphResult, onOpenAnalysis, onRequestAnnotation, onFocusAnnotation, onMasterWord }) => {
     const [showTranslation, setShowTranslation] = useState(false);
     const [localTranslation, setLocalTranslation] = useState(savedResults?.translation || "");
     const [isLocalTransLoading, setIsLocalTransLoading] = useState(false);
@@ -737,7 +753,22 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
                 ))}
             </div>
 
-            {annotations.length > 0 && (
+            {compactActionsEnabled && (
+        <div className="mt-2 mb-3 flex items-center gap-2" data-reader-mobile-actions="true">
+            <button
+                type="button"
+                onClick={handleToggleTrans}
+                disabled={(isTransLoading || isLocalTransLoading) && !finalTranslationToShow}
+                aria-expanded={showTranslation}
+                className="min-h-[38px] px-3 inline-flex items-center gap-2 rounded-sm border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/20 text-[12px] font-medium text-sky-700 dark:text-sky-300 disabled:opacity-50"
+            >
+                {(isTransLoading || isLocalTransLoading) && !finalTranslationToShow ? '翻译中…' : showTranslation ? '收起翻译' : '翻译本段'}
+                {finalTranslationToShow && !showTranslation && <span className="text-[10px] opacity-70">已缓存</span>}
+            </button>
+        </div>
+    )}
+
+                {annotations.length > 0 && (
                 <button
                     type="button"
                     data-reader-note-flag="true"
