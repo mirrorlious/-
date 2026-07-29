@@ -8,6 +8,8 @@ const REQUIRED_DICT_URL = `${VOCAB_RESOURCE_BASE}/考研英语红宝书词汇27�
 
 const EXTRA_DICT_URL = `${VOCAB_RESOURCE_BASE}/考研英语红宝书词汇27新版【超纲词】qy自制.json`;
 
+const IELTS_DICT_URL = './public-resources/ielts-vocabulary/ielts-vocabulary-4-level.json';
+
 const LEGACY_PRESET_DICT_GIST_URL = "https://gist.github.com/mirrorlious97/e39459d2885f9eb78257d4524e18df6f";
 
 const LEGACY_HARD_DICT_GIST_URL = "https://gist.github.com/mirrorlious97/9e36522b809b300f316fc5899bbb448f";
@@ -52,6 +54,31 @@ const fetchVocabularyPack = async (url) => {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to fetch vocabulary pack: ${response.status}`);
     return parseVocabularyPack(await response.json());
+};
+
+const parseIELTSVocabularyPack = (items) => {
+    const dict = {};
+    if (!items || typeof items !== 'object' || Array.isArray(items)) return dict;
+    Object.entries(items).forEach(([rawWord, item]) => {
+        const key = String(rawWord || '').trim().toLowerCase();
+        if (!key || !item) return;
+        dict[key] = {
+            translation: String(item.translation || '').trim(),
+            ieltsLevel: String(item.ieltsLevel || 'extended').trim(),
+            learningAdvice: String(item.learningAdvice || '').trim(),
+            ieltsReason: String(item.ieltsReason || '').trim(),
+            overlapTags: Array.isArray(item.overlapTags) ? item.overlapTags : [],
+            redbookCategories: Array.isArray(item.redbookCategories) ? item.redbookCategories : [],
+            qualityStatus: String(item.qualityStatus || 'review').trim()
+        };
+    });
+    return dict;
+};
+
+const fetchIELTSVocabularyPack = async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch IELTS vocabulary pack: ${response.status}`);
+    return parseIELTSVocabularyPack(await response.json());
 };
 
 const fetchAndParseCorpus = async (setCorpusCount) => {
@@ -112,7 +139,12 @@ const getLemmaMatches = (rawWord, dicts) => {
                 category: entry.category || '',
                 memo: entry.memo || '',
                 note: entry.memo || '',
-                type,
+                type: entry.ieltsLevel || type,
+                learningAdvice: entry.learningAdvice || '',
+                ieltsReason: entry.ieltsReason || '',
+                overlapTags: Array.isArray(entry.overlapTags) ? entry.overlapTags : [],
+                redbookCategories: Array.isArray(entry.redbookCategories) ? entry.redbookCategories : [],
+                qualityStatus: entry.qualityStatus || '',
                 word
             };
         };
@@ -185,9 +217,11 @@ export {
   BASIC_DICT_URL,
   REQUIRED_DICT_URL,
   EXTRA_DICT_URL,
+  IELTS_DICT_URL,
   REAL_EXAM_CORPUS,
   parseDictText,
   fetchVocabularyPack,
+  fetchIELTSVocabularyPack,
   fetchAndParseCorpus,
   getRelevantCorpus,
   getLemmaMatches,

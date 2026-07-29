@@ -3,8 +3,10 @@ import {
   BASIC_DICT_URL,
   REQUIRED_DICT_URL,
   EXTRA_DICT_URL,
+  IELTS_DICT_URL,
   parseDictText,
   fetchVocabularyPack,
+  fetchIELTSVocabularyPack,
   fetchAndParseCorpus,
   normalizeMasteredLemmas,
   buildPortableVocabularyPreferences
@@ -258,7 +260,7 @@ const App = () => {
     const [readingMode, setReadingMode] = useState('intensive');
     const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
 
-    const [highlightMode, setHighlightMode] = useState('exam');
+    const [highlightMode, setHighlightMode] = useState('daily');
 
     const [fullTranslations, setFullTranslations] = useState([]);
     const [isFullTransLoading, setIsFullTransLoading] = useState(false);
@@ -295,6 +297,7 @@ const App = () => {
     const [basicDict, setBasicDict] = useState({});
     const [requiredDict, setRequiredDict] = useState({});
     const [extraDict, setExtraDict] = useState({});
+    const [ieltsDict, setIeltsDict] = useState({});
 
     const [history, setHistory] = useState(localState.history || []);
     const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
@@ -321,11 +324,9 @@ const App = () => {
     const [corpusCount, setCorpusCount] = useState(0);
 
     const activeDicts = useMemo(() => [
-        { data: extraDict, type: 'extra' },
-        { data: requiredDict, type: 'required' },
-        { data: basicDict, type: 'basic' },
+        { data: ieltsDict, type: 'extended' },
         { data: customDict, type: 'custom' }
-    ], [extraDict, requiredDict, basicDict, customDict]);
+    ], [ieltsDict, customDict]);
     const masteredLemmaSet = useMemo(() => new Set(masteredLemmas), [masteredLemmas]);
 
     useEffect(() => {
@@ -339,14 +340,16 @@ const App = () => {
         Promise.all([
             fetchVocabularyPack(BASIC_DICT_URL),
             fetchVocabularyPack(REQUIRED_DICT_URL),
-            fetchVocabularyPack(EXTRA_DICT_URL)
-        ]).then(([basic, required, extra]) => {
+            fetchVocabularyPack(EXTRA_DICT_URL),
+            fetchIELTSVocabularyPack(IELTS_DICT_URL)
+        ]).then(([basic, required, extra, ielts]) => {
             setBasicDict(basic);
             setRequiredDict(required);
             setExtraDict(extra);
+            setIeltsDict(ielts);
         }).catch(error => {
-            console.error('Error loading classified vocabulary packs:', error);
-            window.showToast('分级词库加载失败，请刷新后重试', 'error');
+            console.error('Error loading IELTS vocabulary packs:', error);
+            window.showToast('雅思分层词库加载失败，请刷新后重试', 'error');
         });
     }, []);
 
@@ -2576,14 +2579,15 @@ const App = () => {
                                 </div>
 
                                 {readingMode === 'intensive' && (
-                                    <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="词汇高亮范围" title="词汇高亮范围" className="h-9 w-[112px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
-                                        <option value="exam">必考＋超纲</option>
-                                        <option value="all">全部词汇</option>
-                                        <option value="basic">基础词</option>
-                                        <option value="required">必考词</option>
-                                        <option value="extra">超纲词</option>
-                                        <option value="none">关闭标注</option>
-                                    </select>
+                                    <select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="词汇高亮范围" title="词汇高亮范围" className="h-9 w-[124px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                              <option value="daily">核心＋场景</option>
+                              <option value="all">全部雅思词</option>
+                              <option value="core">雅思核心词</option>
+                              <option value="scenario">雅思场景词</option>
+                              <option value="overlap">基础重合词</option>
+                              <option value="extended">雅思扩展词</option>
+                              <option value="none">关闭标注</option>
+                          </select>
                                 )}
 
                                 <div ref={fullTextMenuContainerRef} className="relative shrink-0">

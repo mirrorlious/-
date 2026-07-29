@@ -16,42 +16,42 @@ import {
 } from '../accessibility/focus.js';
 
 const VOCAB_TYPE_META = {
-    basic: {
-        label: '基础词',
-        underline: 'decoration-green-600 dark:decoration-green-400',
-        badge: 'bg-green-600 dark:bg-green-700',
-        text: 'text-green-700 dark:text-green-400'
-    },
-    required: {
-        label: '必考词',
+    core: {
+        label: '雅思核心词', advice: '优先学习',
         underline: 'decoration-sky-600 dark:decoration-sky-400',
-        badge: 'bg-sky-600 dark:bg-sky-700',
-        text: 'text-sky-700 dark:text-sky-300'
+        badge: 'bg-sky-600 dark:bg-sky-700', text: 'text-sky-700 dark:text-sky-300'
     },
-    extra: {
-        label: '超纲词',
-        underline: 'decoration-red-600 dark:decoration-red-400',
-        badge: 'bg-red-600 dark:bg-red-700',
-        text: 'text-red-700 dark:text-red-400'
+    scenario: {
+        label: '雅思场景词', advice: '正常学习',
+        underline: 'decoration-emerald-600 dark:decoration-emerald-400',
+        badge: 'bg-emerald-600 dark:bg-emerald-700', text: 'text-emerald-700 dark:text-emerald-300'
+    },
+    overlap: {
+        label: '雅思基础重合词', advice: '可选择跳过',
+        underline: 'decoration-amber-500 dark:decoration-amber-400',
+        badge: 'bg-amber-500 dark:bg-amber-600', text: 'text-amber-700 dark:text-amber-300'
+    },
+    extended: {
+        label: '雅思扩展词', advice: '后期学习',
+        underline: 'decoration-violet-500 dark:decoration-violet-400 decoration-dotted',
+        badge: 'bg-violet-600 dark:bg-violet-700', text: 'text-violet-700 dark:text-violet-300'
     },
     custom: {
-        label: '个人词库',
-        underline: 'decoration-amber-500 dark:decoration-amber-400 decoration-dotted',
-        badge: 'bg-amber-600 dark:bg-amber-700',
-        text: 'text-amber-700 dark:text-amber-400'
+        label: '个人词库', advice: '个人标记',
+        underline: 'decoration-rose-500 dark:decoration-rose-400 decoration-dotted',
+        badge: 'bg-rose-600 dark:bg-rose-700', text: 'text-rose-700 dark:text-rose-300'
     },
     phrase: {
-        label: '语法与佳句',
-        underline: 'decoration-violet-500 dark:decoration-violet-400 decoration-dashed',
-        badge: 'bg-violet-600 dark:bg-violet-700',
-        text: 'text-violet-700 dark:text-violet-300'
+        label: '语法与佳句', advice: '结合语境学习',
+        underline: 'decoration-indigo-500 dark:decoration-indigo-400 decoration-dashed',
+        badge: 'bg-indigo-600 dark:bg-indigo-700', text: 'text-indigo-700 dark:text-indigo-300'
     }
 };
 
 const shouldShowVocabType = (type, highlightMode) => {
     if (highlightMode === 'none') return false;
     if (highlightMode === 'all') return true;
-    if (highlightMode === 'exam') return type === 'required' || type === 'extra';
+    if (highlightMode === 'daily') return type === 'core' || type === 'scenario';
     return highlightMode === type;
 };
 
@@ -62,7 +62,7 @@ const WordHighlighter = ({ text, activeDicts, highlightMode, masteredLemmaSet, o
             {parts.map((part, index) => {
                 const match = getLemmaMatches(part, activeDicts);
                 if (match && !masteredLemmaSet?.has(match.word) && part.trim().length > 0 && shouldShowVocabType(match.type, highlightMode)) {
-                    const { translation, type, word: lemma, category, memo } = match;
+                    const { translation, type, word: lemma, category, memo, learningAdvice, ieltsReason, overlapTags, redbookCategories, qualityStatus } = match;
                     const meta = VOCAB_TYPE_META[type] || VOCAB_TYPE_META.custom;
                     return (
                         <span
@@ -74,11 +74,11 @@ const WordHighlighter = ({ text, activeDicts, highlightMode, masteredLemmaSet, o
                             onClick={(event) => {
                                 event.stopPropagation();
                                 event.currentTarget.focus();
-                                onWordClick({ word: part, lemma, translation, type, category, memo, note: memo }, event.currentTarget);
+                                onWordClick({ word: part, lemma, translation, type, category, memo, note: memo, learningAdvice, ieltsReason, overlapTags, redbookCategories, qualityStatus }, event.currentTarget);
                             }}
                             onKeyDown={(event) => {
                                 if (handleArticleVocabularyNavigation(event)) return;
-                                handleKeyboardActivation(event, () => onWordClick({ word: part, lemma, translation, type, category, memo, note: memo }, event.currentTarget));
+                                handleKeyboardActivation(event, () => onWordClick({ word: part, lemma, translation, type, category, memo, note: memo, learningAdvice, ieltsReason, overlapTags, redbookCategories, qualityStatus }, event.currentTarget));
                             }}
                             className={`mx-[1px] cursor-pointer underline decoration-2 underline-offset-[3px] decoration-skip-ink-auto transition-[text-decoration-thickness,opacity] hover:decoration-[3px] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${meta.underline}`}
                         >
@@ -613,9 +613,14 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
                             ? { trans: entry, type: dict.type }
                             : {
                                 trans: entry.translation || entry.zh || '',
-                                note: entry.memo || '',
-                                category: entry.category || '',
-                                type: dict.type
+                      note: entry.memo || '',
+                      category: entry.category || '',
+                      type: entry.ieltsLevel || dict.type,
+                      learningAdvice: entry.learningAdvice || '',
+                      ieltsReason: entry.ieltsReason || '',
+                      overlapTags: Array.isArray(entry.overlapTags) ? entry.overlapTags : [],
+                      redbookCategories: Array.isArray(entry.redbookCategories) ? entry.redbookCategories : [],
+                      qualityStatus: entry.qualityStatus || ''
                             };
                         break;
                     }
@@ -643,8 +648,13 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
                                 isPhrase: true,
                                 trans: phraseData.trans || phraseData.translation,
                                 note: phraseData.note,
-                                category: phraseData.category,
-                                type: phraseType
+                      category: phraseData.category,
+                      type: phraseType,
+                      learningAdvice: phraseData.learningAdvice,
+                      ieltsReason: phraseData.ieltsReason,
+                      overlapTags: phraseData.overlapTags,
+                      redbookCategories: phraseData.redbookCategories,
+                      qualityStatus: phraseData.qualityStatus
                             });
                         }}
                         onKeyDown={(event) => {
@@ -656,8 +666,13 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
                                     isPhrase: true,
                                     trans: phraseData.trans || phraseData.translation,
                                     note: phraseData.note,
-                                    category: phraseData.category,
-                                    type: phraseType
+                      category: phraseData.category,
+                      type: phraseType,
+                      learningAdvice: phraseData.learningAdvice,
+                      ieltsReason: phraseData.ieltsReason,
+                      overlapTags: phraseData.overlapTags,
+                      redbookCategories: phraseData.redbookCategories,
+                      qualityStatus: phraseData.qualityStatus
                                 });
                             });
                         }}
@@ -826,7 +841,21 @@ const Paragraph = ({ text, paragraphIndex, annotations = [], activeAnnotationId,
                     </div>
                     <div className="text-[13px] font-semibold text-gray-800 dark:text-gray-200 mb-2 whitespace-pre-wrap">{activeNote.translation || activeNote.trans}</div>
                     {activeNote.category && <div className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">{activeNote.category}</div>}
-                    {activeNote.note && <div className="text-[13.5px] text-gray-700 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-700">{activeNote.note}</div>}
+          {(activeNote.learningAdvice || (VOCAB_TYPE_META[activeNote.type] || {}).advice) && (
+              <div className="mb-2 flex items-center gap-2 text-[11px]">
+                  <span className="font-semibold text-gray-500 dark:text-gray-400">学习建议</span>
+                  <span className="px-2 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{activeNote.learningAdvice || (VOCAB_TYPE_META[activeNote.type] || {}).advice}</span>
+              </div>
+          )}
+          {activeNote.ieltsReason && <div className="mb-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">{activeNote.ieltsReason}</div>}
+          {Array.isArray(activeNote.overlapTags) && activeNote.overlapTags.length > 0 && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-1">重合标签</span>
+                  {activeNote.overlapTags.map(tag => <span key={tag} className="px-1.5 py-0.5 text-[10px] rounded-sm border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-300 bg-gray-50 dark:bg-gray-900">{tag}</span>)}
+              </div>
+          )}
+          {activeNote.qualityStatus === 'review' && <div className="mb-2 text-[10px] text-amber-700 dark:text-amber-300">该词来自 OCR 或程序补充释义，建议结合语境复核。</div>}
+          {activeNote.note && <div className="text-[13.5px] text-gray-700 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-700">{activeNote.note}</div>}
 
                     {!activeNote.isPhrase && (
                         <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
