@@ -1,0 +1,183 @@
+name: Integrate IELTS vocabulary into PWA main v3
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.event.pull_request.head.ref == 'ci/integrate-ielts-pwa-main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch IELTS source branch
+        run: git fetch origin feat/ielts-four-level-vocabulary
+
+      - name: Run hardened integration port
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/integrate-ielts-pwa-main.yml')
+          text = workflow.read_text(encoding='utf-8')
+          step_start = text.index('      - name: Port IELTS four-level vocabulary into Vite app')
+          run_marker = text.index('        run: |', step_start)
+          body_start = text.index('\n', run_marker) + 1
+          body_end = text.index('\n      - name: Validate vocabulary data', body_start)
+          lines = text[body_start:body_end].splitlines()
+          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines) + '\n'
+
+          selector_start = script.index("replace_once(\n    app,\n    \"\"\"                                    <select")
+          selector_end = script.index("\n\nold_meta =", selector_start)
+          script = script[:selector_start] + "# Selector is patched separately.\n" + script[selector_end + 2:]
+
+          phrase_start = script.index("replace_once(\n    paragraph,\n    \"\"\"                            trans: entry.translation")
+          script = script[:phrase_start] + "# Remaining paragraph metadata patches are applied separately.\n"
+          Path('/tmp/port-ielts.sh').write_text(script, encoding='utf-8')
+          PY
+          bash /tmp/port-ielts.sh
+
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          app = Path('src/App.jsx')
+          text = app.read_text(encoding='utf-8')
+          selector_pattern = re.compile(
+              r'<select value=\{highlightMode\} onChange=\{\(event\) => setHighlightMode\(event\.target\.value\)\} aria-label="词汇高亮范围" title="词汇高亮范围" className="h-9 w-\[112px\][^"]*">\s*'
+              r'<option value="exam">必考＋超纲</option>\s*'
+              r'<option value="all">全部词汇</option>\s*'
+              r'<option value="basic">基础词</option>\s*'
+              r'<option value="required">必考词</option>\s*'
+              r'<option value="extra">超纲词</option>\s*'
+              r'<option value="none">关闭标注</option>\s*'
+              r'</select>',
+              re.S,
+          )
+          selector_replacement = '''<select value={highlightMode} onChange={(event) => setHighlightMode(event.target.value)} aria-label="词汇高亮范围" title="词汇高亮范围" className="h-9 w-[124px] px-2 rounded-sm text-[12px] border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 outline-none focus:border-sky-400 cursor-pointer">
+                                        <option value="daily">核心＋场景</option>
+                                        <option value="all">全部雅思词</option>
+                                        <option value="core">雅思核心词</option>
+                                        <option value="scenario">雅思场景词</option>
+                                        <option value="overlap">基础重合词</option>
+                                        <option value="extended">雅思扩展词</option>
+                                        <option value="none">关闭标注</option>
+                                    </select>'''
+          text, count = selector_pattern.subn(selector_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'IELTS selector regex expected 1 match, found {count}')
+          app.write_text(text, encoding='utf-8')
+
+          paragraph = Path('src/components/Paragraph.jsx')
+          text = paragraph.read_text(encoding='utf-8')
+
+          phrase_lookup_pattern = re.compile(
+              r"trans: entry\.translation \|\| entry\.zh \|\| '',\s*"
+              r"note: entry\.memo \|\| '',\s*"
+              r"category: entry\.category \|\| '',\s*"
+              r"type: dict\.type"
+          )
+          phrase_lookup_replacement = """trans: entry.translation || entry.zh || '',
+                                note: entry.memo || '',
+                                category: entry.category || '',
+                                type: entry.ieltsLevel || dict.type,
+                                learningAdvice: entry.learningAdvice || '',
+                                ieltsReason: entry.ieltsReason || '',
+                                overlapTags: Array.isArray(entry.overlapTags) ? entry.overlapTags : [],
+                                redbookCategories: Array.isArray(entry.redbookCategories) ? entry.redbookCategories : [],
+                                qualityStatus: entry.qualityStatus || ''"""
+          text, count = phrase_lookup_pattern.subn(phrase_lookup_replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'phrase metadata lookup regex expected 1 match, found {count}')
+
+          phrase_click_pattern = re.compile(
+              r"note: phraseData\.note,\s*"
+              r"category: phraseData\.category,\s*"
+              r"type: phraseType"
+          )
+          phrase_click_replacement = """note: phraseData.note,
+                                category: phraseData.category,
+                                type: phraseType,
+                                learningAdvice: phraseData.learningAdvice,
+                                ieltsReason: phraseData.ieltsReason,
+                                overlapTags: phraseData.overlapTags,
+                                redbookCategories: phraseData.redbookCategories,
+                                qualityStatus: phraseData.qualityStatus"""
+          text, count = phrase_click_pattern.subn(phrase_click_replacement, text)
+          if count != 2:
+              raise SystemExit(f'phrase click metadata regex expected 2 matches, found {count}')
+
+          category_line = '{activeNote.category && <div className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">{activeNote.category}</div>}'
+          note_line = '{activeNote.note && <div className="text-[13.5px] text-gray-700 dark:text-gray-300 leading-relaxed bg-gray-50 dark:bg-gray-900 p-3 rounded-lg border border-gray-100 dark:border-gray-700">{activeNote.note}</div>}'
+          needle = category_line + '\n                    ' + note_line
+          card = category_line + '''
+                    {(activeNote.learningAdvice || (VOCAB_TYPE_META[activeNote.type] || {}).advice) && (
+                        <div className="mb-2 flex items-center gap-2 text-[11px]">
+                            <span className="font-semibold text-gray-500 dark:text-gray-400">学习建议</span>
+                            <span className="px-2 py-0.5 rounded-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">{activeNote.learningAdvice || (VOCAB_TYPE_META[activeNote.type] || {}).advice}</span>
+                        </div>
+                    )}
+                    {activeNote.ieltsReason && <div className="mb-2 text-[12px] leading-relaxed text-gray-600 dark:text-gray-300">{activeNote.ieltsReason}</div>}
+                    {Array.isArray(activeNote.overlapTags) && activeNote.overlapTags.length > 0 && (
+                        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 mr-1">重合标签</span>
+                            {activeNote.overlapTags.map(tag => <span key={tag} className="px-1.5 py-0.5 text-[10px] rounded-sm border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-300 bg-gray-50 dark:bg-gray-900">{tag}</span>)}
+                        </div>
+                    )}
+                    {activeNote.qualityStatus === 'review' && <div className="mb-2 text-[10px] text-amber-700 dark:text-amber-300">该词来自 OCR 或程序补充释义，建议结合语境复核。</div>}
+                    ''' + note_line
+          if text.count(needle) != 1:
+              raise SystemExit(f'IELTS word card expected 1 match, found {text.count(needle)}')
+          text = text.replace(needle, card, 1)
+          paragraph.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Validate vocabulary data and source integration
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('public-resources/ielts-vocabulary/ielts-vocabulary-4-level.json').read_text(encoding='utf-8'))
+          assert len(data) == 1992, len(data)
+          counts = {}
+          for item in data.values():
+              counts[item['ieltsLevel']] = counts.get(item['ieltsLevel'], 0) + 1
+          assert counts == {'extended': 554, 'core': 374, 'overlap': 739, 'scenario': 325}, counts
+          PY
+          grep -q "registerPwa" src/main.jsx
+          grep -q "IELTS_DICT_URL" src/core/vocabulary.js
+          grep -q "核心＋场景" src/App.jsx
+          grep -q "雅思基础重合词" src/components/Paragraph.jsx
+          git diff --check
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Build production app
+        run: npm run build
+
+      - name: Commit integration to main
+        run: |
+          rm -f .github/workflows/integrate-ielts-pwa-main.yml
+          rm -f .github/workflows/integrate-ielts-pwa-main-v2.yml
+          rm -f .github/workflows/integrate-ielts-pwa-main-v3.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: integrate IELTS vocabulary layers with PWA app'
+          git push origin HEAD:main
