@@ -151,15 +151,13 @@
 
 ## 10. 未完成项
 
-- 创建、审阅并合并本 PR。
-- 合并后等待阅读器自动部署，并进行正式页面冒烟测试。
+- 部署额度恢复后，验证阅读器正式页面可正常加载。
 - 真实验证 CloudBase DYL 登录、chunk 和媒体后，另开任务删除 `dyl-exam-public-backup/`。
 - 主线 a11y lint 与 E2E 导航竞态应作为独立任务处理，不混入本次清理。
 
 ## 11. 回滚方式
 
-- 合并前：关闭本 PR。
-- 合并后：revert 本 PR 的合并提交。
+- 合并后：revert PR #22 的 squash 合并提交。
 - 所有删除内容均可从基线 `c3a40ffb4833b4696ae0ce689967494a26d64cff` 恢复。
 - 不使用历史重写或强推作为常规回滚。
 
@@ -167,4 +165,14 @@
 
 当前状态：已完成。
 
-普通 Miki 公共池已经从清理分支移除；阅读器实际依赖、DYL 备用目录、用户数据和部署链均未修改。生产构建、单元测试和差异检查通过；lint/E2E 的失败已通过同 runner 主线对照确认属于既有基线问题，不是本次清理回归。分支已具备创建和合并 PR 的条件。
+普通 Miki 公共池已经从阅读器 `main` 移除；阅读器实际依赖、DYL 备用目录、用户数据和部署链均未修改。生产构建、单元测试和差异检查通过；lint/E2E 的失败已通过同 runner 主线对照确认属于既有基线问题，不是本次清理回归。
+
+## 13. Post-merge Update（2026-08-03）
+
+- PR `mirrorlious/-#22` 已通过 squash 合并到 `main`。
+- 合并提交：`5c99c5980413635367d08f1b51ad409801bdc413`。
+- 合并后静态核验：`public-resources/manifest.json` 与 `scripts/build-politics-pack.py` 已不存在。
+- 合并后保护核验：`public-resources/dyl-exam-public-backup/manifest.json` 与雅思词库 JSON 仍存在。
+- Vercel 未进入应用构建，状态因账户 `build-rate-limit` 被平台拦截；这不是代码构建失败。仓库内 production build 已通过。
+- 后续只剩：部署额度恢复后的阅读器页面冒烟测试，以及 CloudBase DYL 登录、chunk、媒体真实验收。
+- `dyl-exam-public-backup/` 仍受门禁保护，必须通过独立任务删除。
