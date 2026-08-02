@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "verifiedHead": "48727173c95cd0a404417fcc1d2d4acbb6d4adb2",
+  "status": "部分完成",
+  "removedPathCount": 10,
+  "removedFileCount": 59,
+  "results": {
+    "install": "success",
+    "unit": "success",
+    "lint": "failure",
+    "build": "success",
+    "edgeInstall": "success",
+    "e2e": "failure",
+    "diffCheck": "success"
+  },
+  "protectedPaths": [
+    "public-resources/dyl-exam-public-backup/manifest.json",
+    "public-resources/dyl-exam-public-backup/data.json",
+    "public-resources/ielts-vocabulary/ielts-vocabulary-4-level.json",
+    "public-resources/kaoyan-english-2027-vocabulary",
+    "scripts/build-cloudbase-v2.cjs",
+    "scripts/generate_kaoyan_english_vocabulary.py",
+    ".github/workflows/generate-kaoyan-english-vocabulary.yml",
+    "src/core/vocabulary.js"
+  ]
+}
