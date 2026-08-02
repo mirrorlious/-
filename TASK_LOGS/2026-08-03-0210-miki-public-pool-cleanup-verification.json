@@ -1,17 +1,44 @@
 {
-  "schemaVersion": 1,
-  "verifiedHead": "48727173c95cd0a404417fcc1d2d4acbb6d4adb2",
-  "status": "部分完成",
+  "schemaVersion": 2,
+  "verifiedHeadBeforeCleanupCommit": "48727173c95cd0a404417fcc1d2d4acbb6d4adb2",
+  "status": "已完成",
+  "taskRegression": false,
   "removedPathCount": 10,
   "removedFileCount": 59,
-  "results": {
+  "cleanupBranchResults": {
     "install": "success",
     "unit": "success",
-    "lint": "failure",
+    "lint": "failure-inherited-from-main",
     "build": "success",
     "edgeInstall": "success",
-    "e2e": "failure",
+    "e2e": "failure-inherited-from-main",
     "diffCheck": "success"
+  },
+  "baselineComparison": {
+    "lint": {
+      "mainExitCode": 1,
+      "cleanupExitCode": 1,
+      "sameFailure": true,
+      "failure": "src/components/Paragraph.jsx:800 jsx-a11y/click-events-have-key-events"
+    },
+    "build": {
+      "mainExitCode": 0,
+      "cleanupExitCode": 0,
+      "sameResult": true,
+      "vocabularyJsonFiles": 3
+    },
+    "e2e": {
+      "mainExitCode": 1,
+      "cleanupExitCode": 1,
+      "sameFailure": true,
+      "mainPassed": 10,
+      "cleanupPassed": 10,
+      "total": 12,
+      "failures": [
+        "accessibility.spec.js:17 page.evaluate navigation destroyed during Axe scan",
+        "accessibility.spec.js:50 page.evaluate navigation destroyed during toast test"
+      ]
+    }
   },
   "protectedPaths": [
     "public-resources/dyl-exam-public-backup/manifest.json",
@@ -22,5 +49,9 @@
     "scripts/generate_kaoyan_english_vocabulary.py",
     ".github/workflows/generate-kaoyan-english-vocabulary.yml",
     "src/core/vocabulary.js"
+  ],
+  "evidence": [
+    "TASK_LOGS/2026-08-03-0210-miki-public-pool-cleanup-audit-summary.md",
+    "TASK_LOGS/2026-08-03-0210-miki-public-pool-cleanup-baseline-comparison.md"
   ]
 }
