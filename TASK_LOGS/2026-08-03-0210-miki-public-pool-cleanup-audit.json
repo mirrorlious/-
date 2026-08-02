@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "repository": "mirrorlious/-",
   "branch": "chore/remove-miki-public-pool",
-  "head": "8efb485f19046c0755c8a94b37a86dbc256e3797",
-  "trackedFileCount": 591,
+  "head": "322a0a33dac5545bbe6f608073426a680951d330",
+  "trackedFileCount": 594,
   "publicResourcesTopLevel": {
     "dyl-exam-public-backup": {
       "fileCount": 430,
@@ -1939,7 +1939,8 @@
     ".github/workflows/audit-miki-public-pool-cleanup.yml",
     ".github/workflows/build-politics-pack.yml",
     ".github/workflows/generate-kaoyan-english-vocabulary.yml",
-    ".github/workflows/pwa-branch-check.yml"
+    ".github/workflows/pwa-branch-check.yml",
+    ".github/workflows/summarize-miki-public-pool-audit.yml"
   ],
   "taskLogs": [
     "TASK_LOGS/.trigger-header-pdf-fix",
@@ -1966,6 +1967,7 @@
     "TASK_LOGS/2026-07-29-2035-stage-2-modularization.md",
     "TASK_LOGS/2026-07-29-2047-stage-3-accessibility.md",
     "TASK_LOGS/2026-07-29-2135-stage-4-system-accessibility-governance.md",
+    "TASK_LOGS/2026-08-03-0210-miki-public-pool-cleanup-audit.json",
     "TASK_LOGS/2026-08-03-0210-miki-public-pool-cleanup.md",
     "TASK_LOGS/PWA_MOBILE_APP.md",
     "TASK_LOGS/README.md"
