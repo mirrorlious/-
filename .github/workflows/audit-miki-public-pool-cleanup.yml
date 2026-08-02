@@ -18,12 +18,16 @@ jobs:
         with:
           fetch-depth: 0
       - run: python .github/scripts/audit_miki_public_pool_cleanup.py
-      - name: Commit audit report
+      - run: python .github/scripts/summarize_miki_public_pool_audit.py
+      - name: Commit audit reports
         run: |
           set -euo pipefail
           rm -f .audit-miki-public-pool-cleanup-trigger
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add TASK_LOGS/2026-08-03-0210-miki-public-pool-cleanup-audit.json .audit-miki-public-pool-cleanup-trigger
-          git commit -m "docs: record Miki public pool ownership audit"
+          git add \
+            TASK_LOGS/2026-08-03-0210-miki-public-pool-cleanup-audit.json \
+            TASK_LOGS/2026-08-03-0210-miki-public-pool-cleanup-audit-summary.md \
+            .audit-miki-public-pool-cleanup-trigger
+          git commit -m "docs: refresh Miki public pool ownership audit"
           git push origin HEAD:chore/remove-miki-public-pool
