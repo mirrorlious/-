@@ -12,4 +12,11 @@ temp/
 # Dependency/build folders if the project is later converted
 node_modules/
 dist/
+
+# Test output
+test-results/
+playwright-report/
+coverage/
 build/
+
+dist/
