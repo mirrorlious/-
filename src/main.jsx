@@ -18,6 +18,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import App from './App.jsx';
+import { BilingualModeController } from './components/BilingualReading.jsx';
 import { registerPwa } from './pwa/registerPwa.js';
 import './styles/app.css';
 import './styles/pwa-mobile.css';
@@ -42,6 +43,7 @@ window.dispatchEvent(new Event('pdfjs-ready'));
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
+    <BilingualModeController />
   </React.StrictMode>
 );
 
