@@ -1,0 +1,305 @@
+#yang-bilingual-header-host {
+  width: 100%;
+  max-width: 1380px !important;
+  margin: 0 auto 18px !important;
+}
+
+.yang-bilingual-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 22px 26px 18px;
+  border-top: 1px solid rgba(100, 116, 139, 0.45);
+  border-bottom: 1px solid rgba(100, 116, 139, 0.6);
+  background: #fbf4e5;
+  color: #252525;
+}
+
+.dark .yang-bilingual-header {
+  background: rgba(41, 37, 31, 0.88);
+  color: #f3f4f6;
+  border-color: rgba(148, 163, 184, 0.36);
+}
+
+.yang-bilingual-heading-copy {
+  min-width: 0;
+}
+
+.yang-bilingual-kicker {
+  margin-bottom: 7px;
+  color: #149b92;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+}
+
+.yang-bilingual-heading-copy h2 {
+  max-width: 850px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(22px, 2.2vw, 34px);
+  line-height: 1.14;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+}
+
+.yang-bilingual-heading-copy p {
+  max-width: 850px;
+  margin-top: 8px;
+  color: #6b665d;
+  font-family: 'Noto Serif SC', STSong, serif;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.dark .yang-bilingual-heading-copy p {
+  color: #b7b3aa;
+}
+
+.yang-bilingual-header-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.yang-bilingual-legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #6b7280;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.yang-bilingual-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.yang-bilingual-swatch {
+  display: inline-block;
+  width: 28px;
+  height: 11px;
+  border-radius: 5px;
+  background: rgba(166, 221, 208, 0.78);
+}
+
+.yang-bilingual-bulk-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #9ccfc7;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+  transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+}
+
+.yang-bilingual-bulk-button:hover:not(:disabled) {
+  background: #fff;
+  border-color: #54b6aa;
+}
+
+.yang-bilingual-bulk-button:disabled {
+  opacity: 0.52;
+  cursor: default;
+}
+
+.dark .yang-bilingual-bulk-button {
+  border-color: rgba(45, 212, 191, 0.35);
+  background: rgba(15, 23, 42, 0.35);
+  color: #99f6e4;
+}
+
+#reader-article-content.yang-bilingual-active {
+  width: 100%;
+  max-width: 1380px !important;
+  margin-inline: auto;
+  padding: 0 18px 56px;
+  border-bottom: 0;
+  background: #fbf4e5;
+}
+
+.dark #reader-article-content.yang-bilingual-active {
+  background: rgba(41, 37, 31, 0.58);
+}
+
+.reader-article-columns.yang-bilingual-active {
+  column-count: initial;
+  column-gap: normal;
+  column-rule: 0;
+}
+
+.yang-bilingual-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.62fr) minmax(320px, 1fr);
+  align-items: stretch;
+  border-bottom: 1px solid rgba(100, 116, 139, 0.35);
+}
+
+.yang-bilingual-source {
+  position: relative;
+  min-width: 0;
+  padding: 27px 34px 25px 50px;
+}
+
+.yang-bilingual-source > [data-reader-paragraph='true'] {
+  margin-bottom: 0 !important;
+}
+
+.yang-bilingual-source [data-reader-text='true'] {
+  margin-bottom: 0 !important;
+}
+
+.yang-bilingual-paragraph-label {
+  position: absolute;
+  top: 31px;
+  left: 9px;
+  color: #12a69d;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.yang-bilingual-translation {
+  min-width: 0;
+  padding: 27px 26px 25px 28px;
+  border-left: 1px solid rgba(100, 116, 139, 0.58);
+  color: #4c4a45;
+  white-space: pre-wrap;
+}
+
+.dark .yang-bilingual-translation {
+  color: #d1d5db;
+  border-left-color: rgba(148, 163, 184, 0.34);
+}
+
+.yang-bilingual-translation-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+  margin-bottom: 8px;
+  color: #8a8479;
+  font-family: Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.yang-bilingual-status {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(20, 155, 146, 0.1);
+  color: #0f766e;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+.yang-bilingual-status-muted {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+}
+
+.yang-bilingual-translation-text {
+  text-align: justify;
+  text-wrap: pretty;
+}
+
+.yang-bilingual-empty,
+.yang-bilingual-translation-loading {
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #9a9489;
+  font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  font-size: 12px;
+}
+
+.yang-bilingual-empty button {
+  padding: 5px 9px;
+  border: 1px solid rgba(20, 155, 146, 0.35);
+  border-radius: 3px;
+  color: #0f766e;
+  background: rgba(255, 255, 255, 0.62);
+  font-weight: 700;
+}
+
+.yang-bilingual-empty button:hover {
+  background: #fff;
+}
+
+.yang-bilingual-source [data-reader-vocabulary='true'] {
+  margin-inline: 1px;
+  padding: 0 2px;
+  border-radius: 4px;
+  background: rgba(166, 221, 208, 0.62);
+  text-decoration: none !important;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.dark .yang-bilingual-source [data-reader-vocabulary='true'] {
+  background: rgba(45, 160, 143, 0.34);
+}
+
+.yang-bilingual-source [data-reader-paragraph-menu='true'] > div:last-child > [role='menuitem']:first-child {
+  display: none;
+}
+
+.yang-bilingual-page .reader-main-column {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  #yang-bilingual-header-host {
+    margin-bottom: 8px !important;
+  }
+
+  .yang-bilingual-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+  }
+
+  .yang-bilingual-header-actions {
+    align-items: stretch;
+  }
+
+  .yang-bilingual-legend {
+    justify-content: space-between;
+  }
+
+  .yang-bilingual-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .yang-bilingual-source {
+    padding: 24px 16px 20px 44px;
+  }
+
+  .yang-bilingual-paragraph-label {
+    top: 27px;
+    left: 8px;
+  }
+
+  .yang-bilingual-translation {
+    padding: 18px 18px 22px 44px;
+    border-left: 0;
+    border-top: 1px dashed rgba(100, 116, 139, 0.35);
+  }
+
+  #reader-article-content.yang-bilingual-active {
+    padding-inline: 0;
+  }
+}
