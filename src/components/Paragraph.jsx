@@ -1,3 +1,4 @@
+import { MobileAnnotationDialog } from './MobileAnnotationDialog.jsx';
 import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   callGeminiIntensiveAnalysis,
@@ -376,7 +377,7 @@ useEffect(() => {
             .filter(k => k.includes(' '));
         const allPhrases = [...Object.keys(PHRASE_DB), ...customPhrases].sort((a, b) => b.length - a.length);
         if (allPhrases.length === 0) return null;
-        return new RegExp(`\\b(${allPhrases.join('|')})\\b`, 'gi');
+        return new RegExp(`\\b(${allPhrases.map(escapeRegExp).join('|')})\\b`, 'gi');
     }, [activeDicts]);
 
     const handleToggleTrans = async (e) => {
@@ -790,32 +791,7 @@ useEffect(() => {
 
 
             {mobileAnnotationBubbleEnabled && activeMobileAnnotation && (
-                <>
-                    <button
-                        type="button"
-                        className="fixed inset-0 z-[70] bg-black/10 backdrop-blur-[1px]"
-                        aria-label="关闭批注气泡"
-                        onClick={() => setMobileAnnotationId(null)}
-                    />
-                    <aside
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label="本段批注"
-                        data-reader-annotation-bubble="true"
-                        className="fixed left-3 right-3 bottom-[max(14px,env(safe-area-inset-bottom))] z-[71] max-h-[46vh] overflow-y-auto rounded-2xl border border-amber-200 dark:border-amber-800 bg-white/98 dark:bg-gray-900/98 shadow-2xl p-4 animate-fade-in-down"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <div className="text-[10px] font-semibold tracking-wider text-amber-700 dark:text-amber-400">本段批注</div>
-                                <div className="mt-1 text-[12px] leading-relaxed text-amber-800 dark:text-amber-300 line-clamp-3">“{activeMobileAnnotation.anchor?.exact || '已标注文字'}”</div>
-                            </div>
-                            <button type="button" onClick={() => setMobileAnnotationId(null)} className="shrink-0 w-8 h-8 grid place-items-center rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-300" aria-label="关闭批注">×</button>
-                        </div>
-                        <div className="mt-3 whitespace-pre-wrap text-[14px] leading-7 text-gray-800 dark:text-gray-200">{activeMobileAnnotation.note || '这条批注暂时没有正文。'}</div>
-                        <div className="mt-3 text-[10px] text-gray-400">{new Date(activeMobileAnnotation.updatedAt || activeMobileAnnotation.createdAt || Date.now()).toLocaleString('zh-CN')}</div>
-                    </aside>
-                </>
+                <MobileAnnotationDialog annotation={activeMobileAnnotation} onClose={() => setMobileAnnotationId(null)} />
             )}
 
             {selectedText && (

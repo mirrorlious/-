@@ -8,7 +8,7 @@
 
 <br />
 
-![Static App](https://img.shields.io/badge/Static%20App-No%20Build-0ea5e9?style=for-the-badge)
+![Static App](https://img.shields.io/badge/Static%20App-Vite%20Build-0ea5e9?style=for-the-badge)
 ![BYOK](https://img.shields.io/badge/AI-BYOK-8b5cf6?style=for-the-badge)
 ![Local First](https://img.shields.io/badge/Data-Local%20First-10b981?style=for-the-badge)
 ![Markdown](https://img.shields.io/badge/Backup-Markdown-f59e0b?style=for-the-badge)
@@ -86,6 +86,7 @@
 ### 2. 真正服务阅读的分栏
 
 - **正文单栏 / 双栏**：宽屏下可采用报刊式双栏顺序阅读。
+- **侧面翻译**：工具栏点击“侧面翻译”，左侧原文、右侧中文逐段对齐并一起滚动；窄屏按每段原文后接译文排列。可翻译单段或依次生成全文，已有译文直接沿用并在刷新后恢复；“重新翻译”使用当前模型重新请求。
 - **标准 / 分栏 / 专注**：按任务切换阅读空间。
 - **学习侧栏 sticky 跟随**：正文下滑时，侧栏持续停留在视口内，并在内部独立滚动。
 - **全宽布局与图标工具栏**：减少页面两侧无效留白，工具集中到正文右上方。
@@ -332,6 +333,10 @@ npm test
 
 缓存基于内容哈希、模型、服务商协议、Prompt 版本和任务类型。相同输入优先读取本地结果，避免重复请求与重复计费。
 
+相同内容和配置的并发文本分析请求会共享一次调用；“测试连接”始终发起真实请求，并使用当前填写的 Key。Gemini 的 Key 通过 `x-goog-api-key` 请求头传递，不拼进 URL。网络响应丢失时不会自动重复请求；明确的限流或临时服务器错误才会重试。
+
+文件和文本使用完整 SHA-256 哈希，PDF 续传按文件内容识别。请通过 HTTPS 或 localhost 运行，以提供安全哈希环境。IndexedDB 写入在事务提交后才报告成功，并复用数据库连接；数据库版本升级时会释放旧连接。已有文章、结果和数据库结构保留，更新后的缓存标识可能使原有缓存首次重新计算。
+
 ---
 
 ## 🧱 技术形态
@@ -360,8 +365,10 @@ index.html → Vite → dist/
 - `npm test` 包含无障碍 ESLint、axe WCAG 扫描、键盘/焦点回归、生产构建和系统 Edge E2E；
 - 可部署到 GitHub Pages；
 - 业务逻辑按 core / services / components 分层，`src/App.jsx` 保留应用级状态与页面编排；
+- `core` 数据工具不依赖 AI 服务；模型 JSON 解析由服务模块显式导入，无需等待 App 注册全局函数；
 - 项目开发规则见 [`AGENTS.md`](./AGENTS.md)；
-- 任务记录规范见 [`TASK_LOGS/README.md`](./TASK_LOGS/README.md)。
+- 阅读完成状态直接维护在源码和本地文章备份中，构建流程不再动态替换 `App.jsx`；
+- CI 对源码、测试和构建脚本变更执行单元测试、无障碍 lint 与生产构建。
 
 ### 无障碍操作摘要
 

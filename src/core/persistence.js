@@ -48,82 +48,73 @@ const READER_DB_VERSION = 3;
 
 const CACHE_PROMPT_VERSION = '2026-07-26-v1';
 
-const openReaderDb = () => new Promise((resolve) => {
-    if (!window.indexedDB) { resolve(null); return; }
-    const request = window.indexedDB.open(READER_DB_NAME, READER_DB_VERSION);
-    request.onupgradeneeded = () => {
-        const db = request.result;
-        if (!db.objectStoreNames.contains('ai-cache')) db.createObjectStore('ai-cache', { keyPath: 'key' });
-        if (!db.objectStoreNames.contains('tts-cache')) db.createObjectStore('tts-cache', { keyPath: 'key' });
-        if (!db.objectStoreNames.contains('pdf-tasks')) db.createObjectStore('pdf-tasks', { keyPath: 'key' });
-        if (!db.objectStoreNames.contains('book-imports')) db.createObjectStore('book-imports', { keyPath: 'key' });
-        if (!db.objectStoreNames.contains('book-articles')) db.createObjectStore('book-articles', { keyPath: 'key' });
-        if (!db.objectStoreNames.contains('article-bundles')) db.createObjectStore('article-bundles', { keyPath: 'key' });
-        if (!db.objectStoreNames.contains('batch-analysis-jobs')) db.createObjectStore('batch-analysis-jobs', { keyPath: 'key' });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => resolve(null);
-});
+let readerDbPromise = null;
 
-const readReaderStore = async (storeName, key) => {
-    const db = await openReaderDb();
-    if (!db) return null;
-    return new Promise(resolve => {
-        const request = db.transaction(storeName, 'readonly').objectStore(storeName).get(key);
-        request.onsuccess = () => resolve(request.result || null);
+const openReaderDb = () => {
+    if (readerDbPromise) return readerDbPromise;
+    readerDbPromise = new Promise(resolve => {
+        if (!window.indexedDB) { resolve(null); return; }
+        let request;
+        try { request = window.indexedDB.open(READER_DB_NAME, READER_DB_VERSION); }
+        catch { resolve(null); return; }
+        request.onupgradeneeded = () => {
+            const db = request.result;
+            for (const name of ['ai-cache', 'tts-cache', 'pdf-tasks', 'book-imports', 'book-articles', 'article-bundles', 'batch-analysis-jobs']) {
+                if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'key' });
+            }
+        };
+        request.onsuccess = () => {
+            const db = request.result;
+            db.onversionchange = () => { db.close(); readerDbPromise = null; };
+            db.onclose = () => { readerDbPromise = null; };
+            resolve(db);
+        };
         request.onerror = () => resolve(null);
+        request.onblocked = () => console.warn('本地数据库升级被其他页面阻塞，请关闭旧页面后重试');
+    }).then(db => {
+        if (!db) readerDbPromise = null;
+        return db;
     });
+    return readerDbPromise;
 };
 
-const writeReaderStore = async (storeName, value) => {
+const runReaderStore = async (storeName, mode, operation, fallback) => {
     const db = await openReaderDb();
-    if (!db) return false;
+    if (!db || !db.objectStoreNames.contains(storeName)) return fallback;
     return new Promise(resolve => {
-        const request = db.transaction(storeName, 'readwrite').objectStore(storeName).put(value);
-        request.onsuccess = () => resolve(true);
-        request.onerror = () => resolve(false);
+        let transaction;
+        let result = fallback;
+        try {
+            transaction = db.transaction(storeName, mode);
+            transaction.oncomplete = () => resolve(result);
+            transaction.onabort = () => resolve(fallback);
+            transaction.onerror = () => resolve(fallback);
+            const request = operation(transaction.objectStore(storeName));
+            request.onsuccess = () => { result = mode === 'readwrite' ? true : request.result ?? fallback; };
+        } catch {
+            try { transaction?.abort(); } catch { /* Transaction may already be inactive. */ }
+            resolve(fallback);
+        }
     });
 };
 
-const deleteReaderStore = async (storeName, key) => {
-    const db = await openReaderDb();
-    if (!db) return false;
-    return new Promise(resolve => {
-        const request = db.transaction(storeName, 'readwrite').objectStore(storeName).delete(key);
-        request.onsuccess = () => resolve(true);
-        request.onerror = () => resolve(false);
-    });
-};
-
-const readAllReaderStore = async (storeName) => {
-    const db = await openReaderDb();
-    if (!db || !db.objectStoreNames.contains(storeName)) return [];
-    return new Promise(resolve => {
-        const request = db.transaction(storeName, 'readonly').objectStore(storeName).getAll();
-        request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
-        request.onerror = () => resolve([]);
-    });
-};
-
-const hashText = async (value) => {
-    const bytes = new TextEncoder().encode(value);
-    if (window.crypto?.subtle) {
-        const digest = await window.crypto.subtle.digest('SHA-256', bytes);
-        return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
-    }
-    return btoa(unescape(encodeURIComponent(value))).slice(0, 64);
-};
+const readReaderStore = (storeName, key) => runReaderStore(storeName, 'readonly', store => store.get(key), null);
+const writeReaderStore = (storeName, value) => runReaderStore(storeName, 'readwrite', store => store.put(value), false);
+const deleteReaderStore = (storeName, key) => runReaderStore(storeName, 'readwrite', store => store.delete(key), false);
+const readAllReaderStore = (storeName) => runReaderStore(storeName, 'readonly', store => store.getAll(), []);
 
 const hashBytes = async (bytes) => {
-    if (window.crypto?.subtle) {
-        const digest = await window.crypto.subtle.digest('SHA-256', bytes);
-        return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
+    if (!window.crypto?.subtle) {
+        throw new Error('内容缓存需要安全浏览器环境，请使用 HTTPS 或 localhost 打开阅读器');
     }
-    return hashText(String(bytes.byteLength));
+    const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
 };
 
+const hashText = (value) => hashBytes(new TextEncoder().encode(value));
+
 const buildCacheKey = async (kind, input, config = {}, options = {}) => {
-    const identity = JSON.stringify({ kind, input, model: config.model || '', apiType: config.apiType || '', baseUrl: config.baseUrl || '', promptVersion: CACHE_PROMPT_VERSION, options });
+    const identity = JSON.stringify({ kind, input, model: config.model || '', apiType: config.apiType || '', baseUrl: config.baseUrl || '', apiVersion: config.apiVersion || 'v1beta', promptVersion: CACHE_PROMPT_VERSION, options });
     return `${kind}:${await hashText(identity)}`;
 };
 
@@ -166,7 +157,7 @@ const persistApiKey = (config = {}) => {
 
 const resolveTaskApiConfig = (config = {}, task = 'analysis') => {
     const route = config.taskRoutes?.[task] || {};
-    return normalizeApiConfig({ ...config, ...route, key: getStoredApiKey(config.key) });
+    return normalizeApiConfig({ ...config, ...route, key: config.key || getStoredApiKey() });
 };
 
 export {

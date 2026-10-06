@@ -1,3 +1,5 @@
+import { ReadingModeControls, BilingualReadingHeader, useBilingualMode } from './components/BilingualReading.jsx';
+import { formatReadingCompletionDate, updateReadingCompletion } from './core/reading-completion.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BASIC_DICT_URL,
@@ -84,8 +86,6 @@ import {
 } from './accessibility/focus.js';
 import { AccessibilityFeedback, SkipLinks, notify } from './accessibility/feedback.jsx';
 
-window.apiKey = "";
-
 window.getExcerpt = (text) => {
     if (!text) return "";
     const cleanText = text.replace(/\n/g, ' ');
@@ -94,24 +94,12 @@ window.getExcerpt = (text) => {
 
 window.showToast = notify;
 
-window.safeParseJSON = (text) => {
-    if (typeof text !== 'string') return text;
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        try {
-            const markdownRegex = new RegExp('`{3}(?:json)?\\s*([\\s\\S]*?)\\s*`{3}', 'i');
-            const match = text.match(markdownRegex);
-            if (match) return JSON.parse(match[1].trim());
-
-            const objMatch = text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-            if (objMatch) return JSON.parse(objMatch[1].trim());
-        } catch(err) {}
-        throw new Error("JSON 解析彻底失败，数据格式不合规");
-    }
-};
 
 const App = () => {
+    const bilingualModeEnabled = useBilingualMode();
+    useEffect(() => {
+        if (bilingualModeEnabled) { setLayoutMode('standard'); setArticleColumnMode('single'); }
+    }, [bilingualModeEnabled]);
     const localState = useMemo(() => {
         try {
             return JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) || '{}') || {};
@@ -309,8 +297,12 @@ const App = () => {
     const [ieltsDict, setIeltsDict] = useState({});
 
     const [history, setHistory] = useState(localState.history || []);
+    const historyRef = useRef(history);
+    historyRef.current = history;
     const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
     const [currentHistoryId, setCurrentHistoryId] = useState(null);
+    const currentHistoryIdRef = useRef(currentHistoryId);
+    currentHistoryIdRef.current = currentHistoryId;
     useEffect(() => {
         setRightPanelTranslationStack([]);
         setPracticePanelResult(null);
@@ -498,13 +490,13 @@ const handleVocabularySourceChange = (nextSource) => {
 
     const handleTestApiConfig = async () => {
         const normalizedConfig = normalizeApiConfig(tempApiConfig);
-        if (!(normalizedConfig.key || window.apiKey)) {
+        if (!normalizedConfig.key) {
             window.showToast("请先填写 API Key", "warning");
             return;
         }
         setIsTestingApi(true);
         try {
-            await callLLM("Reply with exactly: OK", normalizedConfig, false);
+            await callLLM("Reply with exactly: OK", normalizedConfig, false, 'analysis', { bypassCache: true });
             setTempApiConfig(normalizedConfig);
             window.showToast(`连接成功：${normalizedConfig.model}`, "success");
         } catch (error) {
@@ -649,6 +641,18 @@ const handleVocabularySourceChange = (nextSource) => {
 
 
 
+    const toggleReadingCompletion = async (recordId, event) => {
+        event?.stopPropagation();
+        if (!recordId) return;
+        const record = history.find(item => item.id === recordId);
+        if (!record) {
+            window.showToast('未找到这篇文章的阅读记录', 'warning');
+            return;
+        }
+        const completedAt = await updateReadingCompletion(record, saveHistoryToCloud);
+        window.showToast(completedAt ? '已标记为完成阅读' : '已取消完成阅读', 'success');
+    };
+
     const getRecordSourceText = async (record) => {
         if (!record) return '';
         const bundleKey = record.bundleKey || getArticleBundleKey(record.id);
@@ -694,6 +698,7 @@ const handleVocabularySourceChange = (nextSource) => {
                 model: apiConfig.model || '',
                 apiType: apiConfig.apiType || '',
                 promptVersion: CACHE_PROMPT_VERSION,
+                completedAt: Object.hasOwn(existing?.metadata || {}, 'completedAt') ? existing.metadata.completedAt : record?.completedAt || null,
                 updatedAt: Date.now()
             }
         };
@@ -715,6 +720,7 @@ const handleVocabularySourceChange = (nextSource) => {
                 hasGlobalLogic: Boolean(bundle.results?.globalLogicData),
                 hasFullMap: Boolean(bundle.results?.fullMapData),
                 hasFullQuiz: Boolean(bundle.results?.fullQuizData),
+                completedAt: Object.hasOwn(existing, 'completedAt') ? existing.completedAt : bundle.metadata?.completedAt || null,
                 updatedAt: Date.now()
             };
             const next = [record, ...previous.filter(item => item.id !== articleId)].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -725,7 +731,7 @@ const handleVocabularySourceChange = (nextSource) => {
 
     const buildCurrentArticleBundle = async () => {
         if (!currentHistoryId) return null;
-        const record = history.find(item => item.id === currentHistoryId) || { id: currentHistoryId, createdAt: Date.now() };
+        const record = historyRef.current.find(item => item.id === currentHistoryId) || { id: currentHistoryId, createdAt: Date.now() };
         const sourceText = inputText || await getRecordSourceText(record);
         const base = await buildBundleFromRecord(record, sourceText);
         const notes = readingNotes.articles?.[currentHistoryId] || { documentNote: '', annotations: [] };
@@ -755,6 +761,7 @@ const handleVocabularySourceChange = (nextSource) => {
                 model: apiConfig.model || '',
                 apiType: apiConfig.apiType || '',
                 promptVersion: CACHE_PROMPT_VERSION,
+                completedAt: Object.hasOwn(record, 'completedAt') ? record.completedAt : base.metadata?.completedAt || null,
                 updatedAt: Date.now()
             }
         };
@@ -769,6 +776,7 @@ const handleVocabularySourceChange = (nextSource) => {
     };
 
     const handlePersistParagraphResult = (result) => {
+        if (currentHistoryIdRef.current !== currentHistoryId) return;
         if (!result || !Number.isFinite(result.paragraphIndex)) return;
         setParagraphResults(previous => {
             const index = String(result.paragraphIndex);
@@ -787,7 +795,7 @@ const handleVocabularySourceChange = (nextSource) => {
             persistCurrentArticleBundle().catch(error => console.warn('Article bundle save failed:', error));
         }, 450);
         return () => window.clearTimeout(timer);
-    }, [currentHistoryId, isReadingMode, inputText, fullTranslations, globalLogicData, fullMapData, fullQuizData, paragraphResults, readingNotes, rightPanelAnalysis]);
+    }, [currentHistoryId, isReadingMode, inputText, fullTranslations, globalLogicData, fullMapData, fullQuizData, paragraphResults, readingNotes, rightPanelAnalysis, history.find(item => item.id === currentHistoryId)?.completedAt]);
 
     const restoreBundleNotes = (articleId, notes) => {
         if (!articleId || !notes) return;
@@ -920,7 +928,8 @@ const handleVocabularySourceChange = (nextSource) => {
                 hasFullTranslations: Boolean(bundle.results.fullTranslations?.length),
                 hasGlobalLogic: Boolean(bundle.results.globalLogicData),
                 hasFullMap: Boolean(bundle.results.fullMapData),
-                hasFullQuiz: Boolean(bundle.results.fullQuizData)
+                hasFullQuiz: Boolean(bundle.results.fullQuizData),
+                completedAt: bundle.metadata?.completedAt || null
             });
         }
 
@@ -1327,11 +1336,12 @@ const handleVocabularySourceChange = (nextSource) => {
         try {
             const pdfjs = await waitForPdfJs();
             const data = new Uint8Array(await file.arrayBuffer());
+            const fileHash = await hashBytes(data);
             loadingTask = pdfjs.getDocument({ data });
             pdfDocument = await loadingTask.promise;
             setPdfExtractionProgress({ current: 0, total: pdfDocument.numPages });
 
-            const taskKey = `pdf:${await hashText(`${file.name}:${file.size}:${file.lastModified}`)}`;
+            const taskKey = `pdf:${fileHash}`;
             const savedTask = await readReaderStore('pdf-tasks', taskKey);
             const cachedPages = new Map(
                 (Array.isArray(savedTask?.pages) ? savedTask.pages : [])
@@ -1984,8 +1994,12 @@ const handleVocabularySourceChange = (nextSource) => {
         ? (readingNotes.articles?.[currentHistoryId] || { documentNote: "", annotations: [] })
         : { documentNote: "", annotations: [] };
     const currentAnnotations = Array.isArray(currentArticleNotes.annotations) ? currentArticleNotes.annotations : [];
+    const currentHistoryRecord = currentHistoryId
+        ? history.find(item => item.id === currentHistoryId)
+        : null;
+    const currentArticleCompletedAt = currentHistoryRecord?.completedAt || null;
     const currentArticleTitle = currentHistoryId
-        ? (history.find(item => item.id === currentHistoryId)?.title || inferArticleTitleFromText(inputText))
+        ? (currentHistoryRecord?.title || inferArticleTitleFromText(inputText))
         : inferArticleTitleFromText(inputText);
 
     useEffect(() => {
@@ -2065,7 +2079,7 @@ const handleVocabularySourceChange = (nextSource) => {
 
     return (
         <div className={`reader-theme-root ${typographyConfig.theme === 'dark' ? 'dark' : ''}`}>
-            <div className={`reader-page-shell min-h-screen bg-[#F9FAFB] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans pb-24 relative transition-colors duration-300 ${isImmersive ? 'reader-immersive' : ''}`}>
+            <div className={`reader-page-shell ${isReadingMode && bilingualModeEnabled ? 'yang-bilingual-page' : ''} min-h-screen bg-[#F9FAFB] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-sans pb-24 relative transition-colors duration-300 ${isImmersive ? 'reader-immersive' : ''}`}>
                 <AccessibilityFeedback />
                 <SkipLinks showLearningPanel={isReadingMode && rightPanelOpen} />
                 <input ref={markdownInputRef} type="file" accept="text/markdown,.md" multiple className="hidden" aria-label="选择 Markdown 备份文件" onChange={handleMarkdownUpload} />
@@ -2207,11 +2221,24 @@ const handleVocabularySourceChange = (nextSource) => {
                                                 <button onClick={(e) => deleteHistoryRecord(record.id, e)} aria-label={`删除文章：${record.title || '未命名文章'}`} className={`opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded transition-opacity ${currentHistoryId === record.id ? 'hover:bg-gray-700 text-gray-400' : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400'}`}><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
                                                 </div>
                                                 <div className={`text-[13.5px] leading-relaxed font-serif ${currentHistoryId === record.id ? 'text-gray-100' : 'text-gray-700 dark:text-gray-300'}`}>{record.title || window.getExcerpt(record.text || record.preview || '')}</div>
+                                                {record.completedAt && (
+                                                    <div className={`mt-2 text-[10.5px] font-medium tracking-wide ${currentHistoryId === record.id ? 'text-emerald-200' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                                                        ✓ 已完成阅读 {formatReadingCompletionDate(record.completedAt)}
+                                                    </div>
+                                                )}
                                                 <div className="mt-3 flex flex-wrap gap-2 items-center text-[10px] font-medium">
                                                     {(record.fullMapData || record.hasFullMap) && <span className={`px-2 py-0.5 rounded-sm flex items-center ${currentHistoryId === record.id ? 'bg-gray-700 text-gray-300' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-800'}`}><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"></path></svg>结构已缓存</span>}
                                                     {(record.fullTranslations?.length > 0 || record.hasFullTranslations) && <span className={`px-2 py-0.5 rounded-sm flex items-center ${currentHistoryId === record.id ? 'bg-gray-700 text-gray-300' : 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-800'}`}><svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path></svg>翻译已缓存</span>}
                                                     {record.hasGlobalLogic && <span className="px-2 py-0.5 rounded-sm border border-teal-100 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">逻辑已缓存</span>}
                                                     {record.hasFullQuiz && <span className="px-2 py-0.5 rounded-sm border border-violet-100 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300">练习已缓存</span>}
+                                                    <button
+                                                        type="button"
+                                                        onClick={(event) => toggleReadingCompletion(record.id, event)}
+                                                        className={`ml-auto min-h-[28px] px-2.5 rounded-sm border text-[10px] font-medium transition-colors ${record.completedAt ? (currentHistoryId === record.id ? 'border-emerald-300/60 text-emerald-200 hover:bg-white/10' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300') : (currentHistoryId === record.id ? 'border-white/30 text-white hover:bg-white/10' : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300')}`}
+                                                        aria-label={`${record.completedAt ? '取消完成' : '完成阅读'}：${record.title || '未命名文章'}`}
+                                                    >
+                                                        {record.completedAt ? '取消完成' : '完成阅读'}
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -2576,14 +2603,7 @@ const handleVocabularySourceChange = (nextSource) => {
                             <div className="reader-article-toolbar reader-sticky-toolbar w-full sticky z-30 mb-7 px-3 lg:px-4 py-2.5 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-end gap-2" role="toolbar" aria-label={isImmersive ? '沉浸模式' : '阅读工具栏'}>
                                 {!isImmersive && (
                                 <>
-                                <div className="flex items-center gap-1 rounded-sm border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/70 p-1" role="group" aria-label="阅读模式">
-                                    <button type="button" onClick={() => setReadingMode('pure')} className={readerToolbarIconClass(readingMode === 'pure')} aria-pressed={readingMode === 'pure'} aria-label="纯净阅读" title="纯净阅读">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M4 5.5A2.5 2.5 0 016.5 3H11v16H6.5A2.5 2.5 0 004 21.5v-16zm16 0A2.5 2.5 0 0017.5 3H13v16h4.5a2.5 2.5 0 012.5 2.5v-16z"></path></svg>
-                                    </button>
-                                    <button type="button" onClick={() => setReadingMode('intensive')} className={readerToolbarIconClass(readingMode === 'intensive')} aria-pressed={readingMode === 'intensive'} aria-label="深度精读" title="深度精读">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3zm6 11l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14zM6 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z"></path></svg>
-                                    </button>
-                                </div>
+                                <ReadingModeControls readingMode={readingMode} onModeChange={setReadingMode} iconClass={readerToolbarIconClass} />
 
                                 <div className="flex items-center gap-1 rounded-sm border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/70 p-1" role="group" aria-label="页面布局">
                                     <button type="button" onClick={() => setLayoutMode('standard')} className={readerToolbarIconClass(layoutMode === 'standard')} aria-pressed={layoutMode === 'standard'} aria-label="标准布局" title="标准布局">
@@ -2642,6 +2662,18 @@ const handleVocabularySourceChange = (nextSource) => {
                           </div>
                       )}
 
+                                <button
+                                    type="button"
+                                    onClick={(event) => toggleReadingCompletion(currentHistoryId, event)}
+                                    disabled={!currentHistoryId}
+                                    className={`min-h-[36px] shrink-0 px-3 inline-flex items-center gap-1.5 rounded-sm border text-[12px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${currentArticleCompletedAt ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:text-emerald-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-emerald-700 dark:hover:text-emerald-300'}`}
+                                    aria-pressed={Boolean(currentArticleCompletedAt)}
+                                    title={currentArticleCompletedAt ? `已完成于 ${formatReadingCompletionDate(currentArticleCompletedAt)}，点击取消` : '标记为完成阅读'}
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" d="M5 12.5l4 4L19 6.5"></path></svg>
+                                    <span>{currentArticleCompletedAt ? '已完成' : '完成阅读'}</span>
+                                </button>
+
                                 <div ref={fullTextMenuContainerRef} className="relative shrink-0">
                                     <button ref={fullTextMenuTriggerRef} type="button" data-reader-fulltext-trigger="true" onClick={() => setIsFullTextMenuOpen(previous => !previous)} aria-haspopup="menu" aria-expanded={isFullTextMenuOpen} aria-controls="reader-fulltext-menu" className={readerToolbarIconClass(isFullTextMenuOpen)} aria-label="全文工具" title="全文工具">
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M7 3h7l4 4v14H7a2 2 0 01-2-2V5a2 2 0 012-2zM14 3v5h5M9 12h6M9 16h6"></path><path strokeLinecap="round" strokeWidth="1.5" d="M18.5 11.5l.6 1.7 1.7.6-1.7.6-.6 1.7-.6-1.7-1.7-.6 1.7-.6.6-1.7z"></path></svg>
@@ -2668,6 +2700,7 @@ const handleVocabularySourceChange = (nextSource) => {
                                 </button>
                             </div>
 
+                            <BilingualReadingHeader articleId={currentHistoryId} title={currentArticleTitle} />
                             <p id="reader-vocabulary-instructions" className="reader-sr-only">词汇导航区。使用方向键浏览划线词，按 Enter 或空格打开释义，按 Tab 离开正文。</p>
                             {/* The named region is intentionally a roving-focus composite for dense inline vocabulary. */}
                             {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
@@ -2679,11 +2712,12 @@ const handleVocabularySourceChange = (nextSource) => {
                                 aria-describedby="reader-vocabulary-instructions"
                                 data-reader-vocabulary-region="true"
                                 onKeyDown={handleArticleVocabularyNavigation}
-                                className={`reader-article-body ${articleColumnMode === 'double' ? 'reader-article-body-wide reader-article-columns' : 'space-y-4'} border-b border-gray-100 dark:border-gray-800 pb-16 mb-12`}
+                                className={`reader-article-body ${bilingualModeEnabled ? 'yang-bilingual-active' : ''} ${articleColumnMode === 'double' ? 'reader-article-body-wide reader-article-columns' : 'space-y-4'} border-b border-gray-100 dark:border-gray-800 pb-16 mb-12`}
                             >
                                 {paragraphs.map((p, idx) => (
                                     <Paragraph
-                                        key={idx}
+                                        key={`${currentHistoryId}:${idx}`}
+                                        articleId={currentHistoryId}
                                         text={p}
                                         paragraphIndex={idx}
                                         annotations={currentAnnotations.filter(annotation => Number(annotation?.anchor?.paragraphIndex) === idx)}
@@ -2695,7 +2729,7 @@ const handleVocabularySourceChange = (nextSource) => {
                                         onMasterWord={handleMasterWord}
                                         readingMode={readingMode}
                                         highlightMode={highlightMode}
-                                        translationText={fullTranslations[idx]}
+                                        translationText={fullTranslations.length === paragraphs.length ? fullTranslations[idx] : undefined}
                                         isTransLoading={isFullTransLoading}
                                         apiConfig={apiConfig}
                                         typographyConfig={typographyConfig}
