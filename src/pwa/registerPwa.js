@@ -205,7 +205,7 @@ async function setupServiceWorker() {
 }
 
 export function registerPwa() {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !import.meta.env.PROD) return;
 
   window.addEventListener('beforeinstallprompt', (event) => {
     event.preventDefault();
@@ -218,7 +218,12 @@ export function registerPwa() {
     removeBanner();
   });
 
+  let hadController = Boolean(navigator.serviceWorker?.controller);
   navigator.serviceWorker?.addEventListener('controllerchange', () => {
+    if (!hadController) {
+      hadController = true;
+      return;
+    }
     if (refreshing) return;
     refreshing = true;
     window.location.reload();

@@ -1,4 +1,4 @@
-name: PWA branch check
+name: Reader framework check
 
 on:
   pull_request:
@@ -9,10 +9,12 @@ on:
       - 'package.json'
       - 'package-lock.json'
       - 'public/**'
-      - 'scripts/generate-pwa-icons.mjs'
-      - 'src/main.jsx'
-      - 'src/pwa/**'
-      - 'src/styles/pwa-mobile.css'
+      - 'scripts/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'eslint.config.js'
+      - 'vitest.config.js'
+      - 'playwright.config.js'
       - 'vite.config.js'
       - '.github/workflows/pwa-branch-check.yml'
   workflow_dispatch:
@@ -38,6 +40,9 @@ jobs:
 
       - name: Build production app
         run: npm run build
+
+      - name: Validate unit tests and accessibility rules
+        run: npm run test:unit && npm run lint:a11y
 
       - name: Validate PWA output
         shell: bash

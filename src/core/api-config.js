@@ -18,7 +18,6 @@ const normalizeApiConfig = (config = {}) => {
 };
 
 const buildGeminiEndpoint = (config, model) => {
-    const key = config?.key || window.apiKey || "";
     const apiVersion = config?.apiVersion || "v1beta";
     let baseUrl = (config?.baseUrl || "https://generativelanguage.googleapis.com").trim().replace(/\/+$/, "");
     let endpoint;
@@ -26,7 +25,7 @@ const buildGeminiEndpoint = (config, model) => {
     if (/:generateContent(?:\?.*)?$/i.test(baseUrl)) {
         endpoint = baseUrl.replace(/(\/models\/)[^/:?]+(:generateContent)/i, `$1${model}$2`);
     } else if (/\/models\/[^/]+$/i.test(baseUrl)) {
-        endpoint = `${baseUrl}:generateContent`;
+        endpoint = `${baseUrl.replace(/(\/models\/)[^/]+$/i, `$1${model}`)}:generateContent`;
     } else if (/\/models$/i.test(baseUrl)) {
         endpoint = `${baseUrl}/${model}:generateContent`;
     } else if (/\/v1(?:beta|alpha)?$/i.test(baseUrl)) {
@@ -35,11 +34,17 @@ const buildGeminiEndpoint = (config, model) => {
         endpoint = `${baseUrl}/${apiVersion}/models/${model}:generateContent`;
     }
 
-    if (key && !/[?&]key=/i.test(endpoint)) {
-        endpoint += `${endpoint.includes("?") ? "&" : "?"}key=${encodeURIComponent(key)}`;
+    const url = new URL(endpoint);
+    for (const name of Array.from(url.searchParams.keys())) {
+        if (name.toLowerCase() === 'key') url.searchParams.delete(name);
     }
-    return endpoint;
+    return url.toString();
 };
+
+const buildGeminiHeaders = (config = {}) => ({
+    'Content-Type': 'application/json',
+    'x-goog-api-key': config.key || ''
+});
 
 const buildOpenAIEndpoint = (baseUrl) => {
     const normalized = (baseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1").trim().replace(/\/+$/, "");
@@ -48,7 +53,7 @@ const buildOpenAIEndpoint = (baseUrl) => {
 
 const getEndpoint = (config, isTTS = false) => {
     const normalized = normalizeApiConfig(config);
-    const rawModel = isTTS ? CURRENT_GEMINI_TTS_MODEL : (normalized.model || CURRENT_GEMINI_TEXT_MODEL);
+    const rawModel = normalized.model || (isTTS ? CURRENT_GEMINI_TTS_MODEL : CURRENT_GEMINI_TEXT_MODEL);
     const cleanModel = rawModel.trim().toLowerCase().replace(/\s+/g, '-');
     return buildGeminiEndpoint(normalized, cleanModel);
 };
@@ -57,6 +62,7 @@ export {
   CURRENT_GEMINI_TEXT_MODEL,
   CURRENT_GEMINI_TTS_MODEL,
   normalizeApiConfig,
+  buildGeminiHeaders,
   buildOpenAIEndpoint,
   getEndpoint
 };

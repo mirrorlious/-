@@ -1,4 +1,4 @@
-import { readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -10,20 +10,25 @@ const modules = [
   'src/core/article-bundle.js',
   'src/core/pdf-text.js',
   'src/core/persistence.js',
+  'src/core/model-json.js',
+  'src/core/quiz.js',
+  'src/core/reading-completion.js',
   'src/core/vocabulary.js',
   'src/services/ai.js',
   'src/components/MindMap.jsx',
   'src/components/Paragraph.jsx',
   'src/components/PdfReader.jsx',
   'src/components/PracticePanels.jsx',
-  'src/components/ReaderContent.jsx'
+  'src/components/ReaderContent.jsx',
+  'src/components/BilingualReading.jsx',
+  'src/components/MobileAnnotationDialog.jsx'
 ];
 
 const modulePath = (relativePath) => path.join(root, relativePath);
 
 describe('stage 2 module boundaries', () => {
   it('keeps application orchestration below the agreed size ceiling', async () => {
-    const app = await readFile(modulePath('src/App.jsx'), 'utf8');
+    const app = (await readFile(modulePath('src/App.jsx'), 'utf8')).replaceAll('\r\n', '\n');
 
     expect(Buffer.byteLength(app)).toBeLessThan(230_000);
     expect(app).not.toContain('const callLLM =');
@@ -34,10 +39,20 @@ describe('stage 2 module boundaries', () => {
   it('keeps extracted domain and view modules present and bounded', async () => {
     const sizes = await Promise.all(modules.slice(1).map(async (file) => ({
       file,
-      size: (await stat(modulePath(file))).size
+      size: Buffer.byteLength((await readFile(modulePath(file), 'utf8')).replaceAll('\r\n', '\n'))
     })));
 
-    expect(sizes.every(({ size }) => size < 60_000)).toBe(true);
+    for (const { file, size } of sizes) expect(size, file).toBeLessThan(60_000);
+  });
+
+  it('keeps core data helpers independent from AI services and application globals', async () => {
+    for (const file of modules.filter(file => file.startsWith('src/core/'))) {
+      const source = await readFile(modulePath(file), 'utf8');
+      expect(source, file).not.toMatch(/from\s+['"]\.\.\/services\//);
+    }
+    const ai = await readFile(modulePath('src/services/ai.js'), 'utf8');
+    expect(ai).not.toContain('window.safeParseJSON');
+    expect(ai).not.toContain('window.apiKey');
   });
 
   it('does not introduce circular relative imports', async () => {

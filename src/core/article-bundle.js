@@ -1,4 +1,4 @@
-import { normalizeQuizQuestions } from '../services/ai.js';
+import { normalizeQuizQuestions } from './quiz.js';
 
 const ARTICLE_BUNDLE_SCHEMA_VERSION = 2;
 

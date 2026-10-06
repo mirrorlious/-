@@ -1,4 +1,6 @@
-import { buildOpenAIEndpoint, getEndpoint } from '../core/api-config.js';
+import { normalizeQuizQuestions } from '../core/quiz.js';
+import { parseModelJSON } from '../core/model-json.js';
+import { buildOpenAIEndpoint, buildGeminiHeaders, getEndpoint } from '../core/api-config.js';
 import {
   buildCacheKey,
   readReaderStore,
@@ -7,41 +9,28 @@ import {
 } from '../core/persistence.js';
 import { REAL_EXAM_CORPUS, getRelevantCorpus } from '../core/vocabulary.js';
 
-const fetchWithRetry = async (url, options, retries = 5) => {
-    const delays = [2000, 4000, 8000, 15000, 20000];
-    for (let i = 0; i < retries; i++) {
-        try {
-            const response = await fetch(url, options);
-            if (!response.ok) {
-                const errorText = await response.text();
-                let errorMsg = errorText;
-                try {
-                    const errObj = JSON.parse(errorText);
-                    errorMsg = errObj.error?.message || errObj.message || errorText;
-                } catch(e) {}
-                errorMsg = String(errorMsg || "未知请求错误").replace(/\s+/g, " ").trim().slice(0, 240);
-                if (response.status === 404) {
-                    throw new Error(`模型不存在 (HTTP 404)。请确保模型名称填写正确`);
-                }
-                if (response.status === 401 || response.status === 403) {
-                    throw new Error(`API 密钥无效或未授权 (HTTP ${response.status})。`);
-                }
-                if (response.status === 400) {
-                    throw new Error(`请求被拒绝 (HTTP 400)：${errorMsg}`);
-                }
-                const err = new Error(`HTTP ${response.status}: ${errorMsg}`);
-                err.status = response.status;
-                throw err;
-            }
-            return await response.json();
-        } catch (error) {
-            console.warn(`API 尝试 ${i + 1} 失败，准备重试:`, error.message);
-            if (error.message.includes('API 密钥') || error.message.includes('模型不存在') || error.message.includes('请求被拒绝') || (error.status && error.status >= 400 && error.status < 500 && error.status !== 429)) {
-                throw error;
-            }
-            if (i === retries - 1) throw error;
-            await new Promise(res => setTimeout(res, delays[i]));
+const pendingLLMRequests = new Map();
+
+const fetchWithRetry = async (url, options, retries = 3) => {
+    const delays = [2000, 4000];
+    for (let attempt = 0; attempt < retries; attempt += 1) {
+        let response;
+        try { response = await fetch(url, options); }
+        catch (error) {
+            if (error.name === 'AbortError') throw new Error('请求已取消');
+            // A lost response may already have consumed model quota; do not repeat it automatically.
+            throw new Error('网络请求失败，请检查网络连接和服务商的浏览器访问权限');
         }
+        if (response.ok) {
+            try { return await response.json(); }
+            catch { throw new Error('服务商返回了无效 JSON，请检查接口地址'); }
+        }
+        if (response.status === 401 || response.status === 403) throw new Error(`API 密钥无效或未授权 (HTTP ${response.status})。`);
+        if (response.status === 404) throw new Error('模型不存在 (HTTP 404)。请确保模型名称填写正确');
+        if (response.status === 400) throw new Error('请求被拒绝 (HTTP 400)，请检查模型配置与输入格式');
+        const retryable = [429, 500, 502, 503, 504].includes(response.status);
+        if (!retryable || attempt === retries - 1) throw new Error(`模型服务请求失败 (HTTP ${response.status})，请稍后重试`);
+        await new Promise(resolve => setTimeout(resolve, delays[attempt]));
     }
 };
 
@@ -49,45 +38,61 @@ const getCandidateText = (result) => {
     if (!result || !result.candidates || result.candidates.length === 0) {
         throw new Error("API 未返回有效内容或被限流过滤");
     }
-    return result.candidates[0].content.parts[0].text;
+    const text = result.candidates[0]?.content?.parts
+        ?.filter(part => !part.thought && typeof part.text === 'string')
+        .map(part => part.text).join('');
+    if (!text?.trim()) throw new Error('API 未返回有效文本内容');
+    return text;
 };
 
-const callLLM = async (prompt, apiConfig, isJson = false, task = 'analysis') => {
+const callLLM = async (prompt, apiConfig, isJson = false, task = 'analysis', { bypassCache = false } = {}) => {
     const normalizedConfig = resolveTaskApiConfig(apiConfig, task);
     const type = normalizedConfig?.apiType || 'gemini';
-    const key = normalizedConfig?.key || window.apiKey;
+    const key = normalizedConfig?.key || '';
     const cacheKey = await buildCacheKey('llm', prompt, normalizedConfig, { task, isJson });
-    const cached = await readReaderStore('ai-cache', cacheKey);
-    if (cached) return cached.value;
-    let value;
+    const requestIdentity = JSON.stringify([cacheKey, key, bypassCache]);
+    if (pendingLLMRequests.has(requestIdentity)) return pendingLLMRequests.get(requestIdentity);
+    const request = (async () => {
+        if (!bypassCache) {
+            const cached = await readReaderStore('ai-cache', cacheKey);
+            if (cached) return cached.value;
+        }
+        if (!key) throw new Error('请先配置自己的 API Key');
+        let value;
 
-    if (type === 'openai') {
-        const endpoint = buildOpenAIEndpoint(normalizedConfig?.baseUrl);
-        const payload = {
-            model: normalizedConfig?.model || "qwen-plus",
-            messages: [{ role: "user", content: prompt }]
-        };
-        const result = await fetchWithRetry(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-            body: JSON.stringify(payload)
-        });
-        if (!result.choices || result.choices.length === 0) throw new Error("OpenAI API 未返回有效内容");
-        let text = result.choices[0].message.content;
-        value = isJson ? window.safeParseJSON(text) : text.trim();
-    } else {
-        const endpoint = getEndpoint(normalizedConfig);
-        const payload = { contents: [{ parts: [{ text: prompt }] }] };
-        const result = await fetchWithRetry(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        let text = getCandidateText(result);
-        value = isJson ? window.safeParseJSON(text) : text.trim();
-    }
-    await writeReaderStore('ai-cache', { key: cacheKey, value, createdAt: Date.now(), task });
-    return value;
+        if (type === 'openai') {
+            const endpoint = buildOpenAIEndpoint(normalizedConfig?.baseUrl);
+            const payload = {
+                model: normalizedConfig?.model || "qwen-plus",
+                messages: [{ role: "user", content: prompt }]
+            };
+            const result = await fetchWithRetry(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+                body: JSON.stringify(payload)
+            });
+            if (!result.choices || result.choices.length === 0) throw new Error("OpenAI API 未返回有效内容");
+            let text = result.choices[0]?.message?.content;
+            if (typeof text !== 'string' || !text.trim()) throw new Error('OpenAI API 未返回有效文本内容');
+            value = isJson ? parseModelJSON(text) : text.trim();
+        } else {
+            const endpoint = getEndpoint(normalizedConfig);
+            const payload = { contents: [{ parts: [{ text: prompt }] }] };
+            const result = await fetchWithRetry(endpoint, {
+                method: 'POST',
+                headers: buildGeminiHeaders(normalizedConfig),
+                body: JSON.stringify(payload)
+            });
+            let text = getCandidateText(result);
+            value = isJson ? parseModelJSON(text) : text.trim();
+        }
+        const saved = await writeReaderStore('ai-cache', { key: cacheKey, value, createdAt: Date.now(), task });
+        if (!saved) window.showToast?.('结果已生成，但本地缓存保存失败，重复操作可能再次消耗额度', 'warning');
+        return value;
+    })();
+    pendingLLMRequests.set(requestIdentity, request);
+    try { return await request; }
+    finally { pendingLLMRequests.delete(requestIdentity); }
 };
 
 const callGeminiFullTranslation = async (fullText, apiConfig) => {
@@ -100,9 +105,9 @@ const callGeminiFullTranslation = async (fullText, apiConfig) => {
     return await callLLM(prompt, apiConfig, false);
 };
 
-const callGeminiTranslation = async (text, apiConfig) => {
+const callGeminiTranslation = async (text, apiConfig, options = {}) => {
     const prompt = `你是一名深谙政经语境的高级翻译官。请精翻以下段落：\n要求：符合中文新闻语感，精准翻译政经/法律术语。仅输出纯中文译文，绝不附加任何解析。\n原文：\n"${text}"`;
-    return await callLLM(prompt, apiConfig, false);
+    return await callLLM(prompt, apiConfig, false, 'analysis', options);
 };
 
 const callGeminiWordDisambiguation = async (word, context, rawMeaning, apiConfig) => {
@@ -188,14 +193,6 @@ const callGeminiQuiz = async (text, apiConfig) => {
     return await callLLM(prompt, apiConfig, true);
 };
 
-const normalizeQuizQuestions = (quizData) => {
-    if (!quizData) return [];
-    if (Array.isArray(quizData)) return quizData.filter(Boolean);
-    if (Array.isArray(quizData.questions)) return quizData.questions.filter(Boolean);
-    if (quizData.questionEn || quizData.options) return [quizData];
-    return [];
-};
-
 const callGeminiFullQuiz = async (text, apiConfig) => {
     const prompt = `你是一名考研英语阅读命题专家。请根据以下完整文章生成恰好3道单项选择题。
 题目要求：
@@ -251,12 +248,13 @@ const callGeminiTTS = async (text, apiConfig) => {
     const cacheKey = await buildCacheKey('tts', text, normalizedConfig, { voice: 'Aoede' });
     const cached = await readReaderStore('tts-cache', cacheKey);
     if (cached?.blob) return URL.createObjectURL(cached.blob);
+    if (!normalizedConfig.key) throw new Error('请先配置自己的 API Key');
     const endpoint = getEndpoint(normalizedConfig, true);
     const payload = {
         contents: [{ parts: [{ text: `Please read clearly: ${text}` }] }],
         generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } } } },
     };
-    const result = await fetchWithRetry(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    const result = await fetchWithRetry(endpoint, { method: 'POST', headers: buildGeminiHeaders(normalizedConfig), body: JSON.stringify(payload) });
     const base64PCM = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     if (!base64PCM) throw new Error("API 未返回有效音频数据");
     const audioUrl = createWavFileFromPCM(base64PCM, 24000);
@@ -295,11 +293,12 @@ const extractTextFromMedia = async (base64Data, mimeType, apiConfig) => {
     const prompt = "Extract English text accurately. CRITICAL: Fix physical line breaks mid-sentence so paragraphs are continuous. Separate different paragraphs with double newlines strictly. Output ONLY the English text.";
     const normalizedConfig = resolveTaskApiConfig(apiConfig, 'ocr');
     const type = normalizedConfig?.apiType || 'gemini';
+    if (!normalizedConfig.key) throw new Error('请先配置自己的 API Key');
 
     if (type === 'openai') {
         const result = await fetchWithRetry(buildOpenAIEndpoint(normalizedConfig.baseUrl), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${normalizedConfig.key || window.apiKey}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${normalizedConfig.key || ''}` },
             body: JSON.stringify({
                 model: normalizedConfig.model || "qwen-plus",
                 messages: [{
@@ -318,7 +317,7 @@ const extractTextFromMedia = async (base64Data, mimeType, apiConfig) => {
 
     const result = await fetchWithRetry(getEndpoint(normalizedConfig), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildGeminiHeaders(normalizedConfig),
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType, data: base64Data } }] }] })
     });
     return getCandidateText(result).replace(/(?<!\n)\n(?!\n)/g, ' ');
